@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, FileText, UserPlus } from 'lucide-react';
+import { Search, Plus, FileText, UserPlus, User } from 'lucide-react';
 
 interface Paciente {
   id: string;
@@ -85,19 +85,30 @@ export default function ListaPacientes() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {pacientesFiltrados.map((paciente) => (
-              <div key={paciente.id} className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <h3 className="font-bold text-lg text-slate-900 mb-1">{paciente.nome_completo}</h3>
-                <div className="text-sm text-slate-600 space-y-1 mb-4">
-                  <p>📱 {paciente.telefone || 'Sem telefone'}</p>
-                  <p>✉️ {paciente.email || 'Sem e-mail'}</p>
+              <div key={paciente.id} className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col h-full">
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg text-slate-900 mb-1">{paciente.nome_completo}</h3>
+                  <div className="text-sm text-slate-600 space-y-1 mb-4">
+                    <p>📱 {paciente.telefone || 'Sem telefone'}</p>
+                    <p>✉️ {paciente.email || 'Sem e-mail'}</p>
+                  </div>
                 </div>
-                <div className="pt-4 border-t border-slate-100 flex gap-3">
+                
+                {/* Botões de Ação Atualizados */}
+                <div className="pt-4 border-t border-slate-100 flex gap-2 mt-auto">
+                  <Link
+                    href={`/pacientes/${paciente.id}`}
+                    className="flex-1 flex items-center justify-center gap-2 bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    Ver Perfil
+                  </Link>
                   <Link
                     href={`/prescricoes/nova?pacienteId=${paciente.id}`}
-                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                   >
                     <FileText className="w-4 h-4" />
-                    Nova Prescrição
+                    Nova Dieta
                   </Link>
                 </div>
               </div>

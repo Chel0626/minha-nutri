@@ -102,13 +102,14 @@ export default function HistoricoPrescricoes() {
                         {prescricao.pacientes?.nome_completo || 'Paciente não encontrado'}
                       </td>
                       <td className="p-4 text-right">
-                        <button
-                          onClick={() => alert('Função de Impressão PDF em desenvolvimento!')}
-                          className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-800 font-medium bg-emerald-50 px-3 py-1.5 rounded-md transition"
+                        {/* Botão corrigido usando Link para a tela de impressão */}
+                        <Link
+                          href={`/prescricoes/${prescricao.id}`}
+                          className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-800 font-medium bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-md transition"
                         >
                           <Printer className="w-4 h-4" />
-                          Imprimir
-                        </button>
+                          Ver / Imprimir
+                        </Link>
                       </td>
                     </tr>
                   ))}
