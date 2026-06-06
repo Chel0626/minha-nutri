@@ -54,14 +54,15 @@ Este sistema é uma plataforma de nutrição customizada e exclusiva para uso de
 * `conteudo` (text, NOT NULL)         -- O bloco de texto que vai ser injetado no PDF
 * `created_at` (timestamptz, default: now())
 
-### 4. `prescricoes` (Planos Alimentares Vinculados)
-* `id` (uuid, PK, default: gen_random_uuid())
-* `paciente_id` (uuid, FK -> pacientes.id, ON DELETE CASCADE)
-* `anamnese_id` (uuid, FK -> anamneses.id, ON DELETE SET NULL)
-* `cardapio_texto` (text, NOT NULL) -- O texto livre do cardápio (Fase 1)
-* `orientacoes_selecionadas` (uuid[]) -- Array contendo IDs da tabela pre_configuracoes
-* `created_at` (timestamptz, default: now())
-
+### 4. Fluxo da Tela de Prescrição Estruturada (`/app/prescricoes/nova/page.tsx`)
+1. **Cabeçalho Fixo (Metadados):** Dados estáticos bem estilizados (Nome do Paciente, Data, Fase/Calorias, Meta Insulina Geral).
+2. **Sessões Dinâmicas de Refeição:** Permite adicionar múltiplos blocos de refeição. Cada bloco contém:
+   * Nome da Refeição (Ex: Café da Manhã) e Horário/Âncora (Ex: Pós-Treino).
+   * Meta Insulina da Refeição (Campos numéricos para Carboidratos e Proteínas).
+   * Área de texto para os alimentos daquela refeição.
+   * **Botão Expansível (Condutas de Gaveta):** Ao clicar, abre um painel/modal com os blocos de texto da tabela `pre_configuracoes` filtrados ou listados com um Checkbox. Ao marcar, o texto é importado/injetado direto no campo de texto daquela refeição específica.
+3. **Sessão de Tabelas de Equivalentes:** Checkboxes para selecionar quais tabelas padrão de substitutos injetar automaticamente no final do PDF (Tabela 1: Proteína Animal, Tabela 2: Substitutos de Arroz, Tabela 3: Frutas).
+4. **Impressão/PDF:** Um botão de gerar PDF que renderiza um layout limpo, com linhas divisórias elegantes, cabeçalho clínico centralizado e quebra de página controlada para as tabelas de equivalentes e blocos de hipoglicemia.
 ---
 
 ## 🗺️ Mapa de Telas & Funcionalidades (Next.js)

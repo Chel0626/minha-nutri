@@ -4,72 +4,222 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
-import { PrescricaoFormData } from '@/types/database.types';
+import { Paciente, PreConfiguracao } from '@/types/database.types';
+import { ChevronDown, Plus, Trash2, Check } from 'lucide-react';
+
+interface Refeicao {
+  id: string;
+  nome: string;
+  horario: string;
+  metaCarboidratos: string;
+  metaProteinas: string;
+  alimentos: string;
+  expandido: boolean;
+}
+
+interface MetadadosPrescricion {
+  pacienteId: string;
+  pacienteNome: string;
+  faseCaloricas: string;
+  dataPrescricao: string;
+}
 
 export default function CriarPrescricao() {
   const { pacientes, loading: loadingPacientes } = usePacientes();
   const { preConfigs, loading: loadingConfigs } = usePreConfiguracoes();
 
-  const [formData, setFormData] = useState<PrescricaoFormData>({
-    paciente_id: '',
-    cardapio_texto: '',
-    orientacoes_selecionadas: [],
+  // Estado para metadados
+  const [metadados, setMetadados] = useState<MetadadosPrescricion>({
+    pacienteId: '',
+    pacienteNome: '',
+    faseCaloricas: '',
+    dataPrescricao: new Date().toISOString().split('T')[0],
+  });
+
+  // Estado para refeições dinâmicas
+  const [refeicoes, setRefeicoes] = useState<Refeicao[]>([
+    {
+      id: '1',
+      nome: 'Café da Manhã',
+      horario: '',
+      metaCarboidratos: '',
+      metaProteinas: '',
+      alimentos: '',
+      expandido: false,
+    },
+  ]);
+
+  // Estado para tabelas de equivalentes
+  const [tabelasSelecionadas, setTabelasSelecionadas] = useState({
+    proteinas: false,
+    substitutosArroz: false,
+    frutas: false,
   });
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Handle mudanças no input de paciente
+  // Agrupar pré-configurações por categoria
+  const configsPorCategoria = preConfigs.reduce(
+    (acc, config: PreConfiguracao) => {
+      if (!acc[config.categoria]) {
+        acc[config.categoria] = [];
+      }
+      acc[config.categoria].push(config);
+      return acc;
+    },
+    {} as Record<string, PreConfiguracao[]>
+  );
+
+  // Handle mudança de paciente
   const handlePacienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      paciente_id: e.target.value,
+    const pacienteId = e.target.value;
+    const paciente = pacientes.find((p) => p.id === pacienteId);
+    setMetadados({
+      ...metadados,
+      pacienteId,
+      pacienteNome: paciente?.nome_completo || '',
     });
   };
 
-  // Handle mudanças no textarea de cardápio
-  const handleCardapioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      cardapio_texto: e.target.value,
+  // Handle mudança de fase/calorias
+  const handleFaseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMetadados({
+      ...metadados,
+      faseCaloricas: e.target.value,
     });
   };
 
-  // Handle mudanças nos checkboxes de orientações
-  const handleOrientacaoChange = (id: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      orientacoes_selecionadas: prev.orientacoes_selecionadas.includes(id)
-        ? prev.orientacoes_selecionadas.filter((oid) => oid !== id)
-        : [...prev.orientacoes_selecionadas, id],
-    }));
+  // Handle mudança de data
+  const handleDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMetadados({
+      ...metadados,
+      dataPrescricao: e.target.value,
+    });
   };
 
-  // Salvar prescrição no Supabase
-  const handleSavePrescricao = async (e: React.FormEvent) => {
+  // Adicionar nova refeição
+  const adicionarRefeicao = () => {
+    const novaRefeicao: Refeicao = {
+      id: Date.now().toString(),
+      nome: '',
+      horario: '',
+      metaCarboidratos: '',
+      metaProteinas: '',
+      alimentos: '',
+      expandido: false,
+    };
+    setRefeicoes([...refeicoes, novaRefeicao]);
+  };
+
+  // Remover refeição
+  const removerRefeicao = (id: string) => {
+    setRefeicoes(refeicoes.filter((r) => r.id !== id));
+  };
+
+  // Atualizar refeição
+  const atualizarRefeicao = (id: string, campo: keyof Refeicao, valor: string | boolean) => {
+    setRefeicoes(
+      refeicoes.map((r) => (r.id === id ? { ...r, [campo]: valor } : r))
+    );
+  };
+
+  // Expandir/Colapsar accordion de condutas
+  const toggleExpandido = (id: string) => {
+    setRefeicoes(
+      refeicoes.map((r) => (r.id === id ? { ...r, expandido: !r.expandido } : r))
+    );
+  };
+
+  // Injetar conduta no textarea da refeição
+  const injetarConduta = (refeicaoId: string, conteudo: string) => {
+    setRefeicoes(
+      refeicoes.map((r) => {
+        if (r.id === refeicaoId) {
+          return {
+            ...r,
+            alimentos: r.alimentos ? `${r.alimentos}\n\n${conteudo}` : conteudo,
+          };
+        }
+        return r;
+      })
+    );
+  };
+
+  // Toggle tabela de equivalentes
+  const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => {
+    setTabelasSelecionadas({
+      ...tabelasSelecionadas,
+      [tabela]: !tabelasSelecionadas[tabela],
+    });
+  };
+
+  // Salvar prescrição
+  const handleSalvarPrescricao = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     // Validações
-    if (!formData.paciente_id) {
+    if (!metadados.pacienteId) {
       setError('Por favor, selecione um paciente');
       return;
     }
 
-    if (!formData.cardapio_texto.trim()) {
-      setError('Por favor, preencha o cardápio');
+    if (refeicoes.length === 0 || refeicoes.every((r) => !r.alimentos.trim())) {
+      setError('Por favor, adicione pelo menos uma refeição com alimentos');
       return;
     }
 
     try {
       setLoading(true);
 
+      // Preparar conteúdo da prescrição
+      let conteudoPrescricao = `PRESCRIÇÃO NUTRICIONAL\n`;
+      conteudoPrescricao += `Data: ${metadados.dataPrescricao}\n`;
+      conteudoPrescricao += `Paciente: ${metadados.pacienteNome}\n`;
+      conteudoPrescricao += `Fase/Calorias: ${metadados.faseCaloricas}\n\n`;
+      conteudoPrescricao += `${'='.repeat(60)}\n\n`;
+
+      // Adicionar refeições
+      refeicoes.forEach((ref) => {
+        conteudoPrescricao += `${ref.nome.toUpperCase()}\n`;
+        if (ref.horario) conteudoPrescricao += `Horário: ${ref.horario}\n`;
+        if (ref.metaCarboidratos)
+          conteudoPrescricao += `Meta Carboidratos: ${ref.metaCarboidratos}g\n`;
+        if (ref.metaProteinas)
+          conteudoPrescricao += `Meta Proteínas: ${ref.metaProteinas}g\n`;
+        conteudoPrescricao += `\n${ref.alimentos}\n\n`;
+      });
+
+      // Adicionar tabelas de equivalentes
+      if (tabelasSelecionadas.proteinas) {
+        conteudoPrescricao += `${'='.repeat(60)}\n`;
+        conteudoPrescricao += `TABELA DE EQUIVALENTES - PROTEÍNAS\n`;
+        conteudoPrescricao += `${'='.repeat(60)}\n`;
+        conteudoPrescricao += `[Tabela de proteínas será inserida aqui]\n\n`;
+      }
+
+      if (tabelasSelecionadas.substitutosArroz) {
+        conteudoPrescricao += `${'='.repeat(60)}\n`;
+        conteudoPrescricao += `TABELA DE EQUIVALENTES - SUBSTITUTOS DE ARROZ\n`;
+        conteudoPrescricao += `${'='.repeat(60)}\n`;
+        conteudoPrescricao += `[Tabela de substitutos será inserida aqui]\n\n`;
+      }
+
+      if (tabelasSelecionadas.frutas) {
+        conteudoPrescricao += `${'='.repeat(60)}\n`;
+        conteudoPrescricao += `TABELA DE EQUIVALENTES - FRUTAS\n`;
+        conteudoPrescricao += `${'='.repeat(60)}\n`;
+        conteudoPrescricao += `[Tabela de frutas será inserida aqui]\n\n`;
+      }
+
+      // Salvar no Supabase
       const { error: insertError } = await supabase.from('prescricoes').insert([
         {
-          paciente_id: formData.paciente_id,
-          cardapio_texto: formData.cardapio_texto,
-          orientacoes_selecionadas: formData.orientacoes_selecionadas,
+          paciente_id: metadados.pacienteId,
+          cardapio_texto: conteudoPrescricao,
+          orientacoes_selecionadas: [],
           created_at: new Date().toISOString(),
         },
       ]);
@@ -77,14 +227,30 @@ export default function CriarPrescricao() {
       if (insertError) throw insertError;
 
       setSuccess(true);
-      // Limpar formulário após sucesso
-      setFormData({
-        paciente_id: '',
-        cardapio_texto: '',
-        orientacoes_selecionadas: [],
+      // Resetar formulário
+      setMetadados({
+        pacienteId: '',
+        pacienteNome: '',
+        faseCaloricas: '',
+        dataPrescricao: new Date().toISOString().split('T')[0],
+      });
+      setRefeicoes([
+        {
+          id: '1',
+          nome: 'Café da Manhã',
+          horario: '',
+          metaCarboidratos: '',
+          metaProteinas: '',
+          alimentos: '',
+          expandido: false,
+        },
+      ]);
+      setTabelasSelecionadas({
+        proteinas: false,
+        substitutosArroz: false,
+        frutas: false,
       });
 
-      // Esconder mensagem de sucesso após 3 segundos
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar prescrição';
@@ -95,30 +261,16 @@ export default function CriarPrescricao() {
     }
   };
 
-  // Agrupar pré-configurações por categoria
-  const configsPorCategoria = preConfigs.reduce(
-    (acc, config: any) => {
-      if (!acc[config.categoria]) {
-        acc[config.categoria] = [];
-      }
-      acc[config.categoria].push(config);
-      return acc;
-    },
-    {} as Record<string, any[]>
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
       <div className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-6 py-6">
+        <div className="max-w-6xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                Criar Prescrição
-              </h1>
+              <h1 className="text-3xl font-bold text-slate-900">Criar Prescrição</h1>
               <p className="text-slate-600 text-sm mt-1">
-                Selecione um paciente, monte o cardápio e escolha as orientações
+                Estruture a prescrição com refeições, metas e condutas
               </p>
             </div>
             <Link
@@ -132,12 +284,13 @@ export default function CriarPrescricao() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <form onSubmit={handleSavePrescricao} className="space-y-6">
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <form onSubmit={handleSalvarPrescricao} className="space-y-6">
           {/* Alert de Sucesso */}
           {success && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-green-700">
-              ✓ Prescrição salva com sucesso!
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 text-green-700">
+              <Check className="w-5 h-5" />
+              Prescrição salva com sucesso!
             </div>
           )}
 
@@ -148,133 +301,280 @@ export default function CriarPrescricao() {
             </div>
           )}
 
-          {/* Section 1: Seleção de Paciente */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">
-              1. Selecionar Paciente
-            </h2>
+          {/* SEÇÃO 1: METADADOS */}
+          <div className="bg-white rounded-lg border border-slate-200 p-8 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-900 mb-6">Metadados da Prescrição</h2>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Paciente *
-              </label>
-              <select
-                value={formData.paciente_id}
-                onChange={handlePacienteChange}
-                disabled={loadingPacientes}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed"
-              >
-                <option value="">
-                  {loadingPacientes ? 'Carregando pacientes...' : 'Escolha um paciente'}
-                </option>
-                {pacientes.map((paciente) => (
-                  <option key={paciente.id} value={paciente.id}>
-                    {paciente.nome_completo}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Section 2: Cardápio */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">
-              2. Cardápio
-            </h2>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Detalhes do Cardápio *
-              </label>
-              <p className="text-xs text-slate-500 mb-3">
-                Digite o cardápio com quantidades, horários e recomendações específicas para o paciente.
-              </p>
-              <textarea
-                value={formData.cardapio_texto}
-                onChange={handleCardapioChange}
-                placeholder="Ex: Café da manhã: 2 ovos cozidos + pão integral 50g + suco de laranja natural..."
-                rows={8}
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
-              />
-            </div>
-          </div>
-
-          {/* Section 3: Orientações */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">
-              3. Orientações
-            </h2>
-
-            {loadingConfigs ? (
-              <div className="text-center py-8 text-slate-600">
-                Carregando orientações...
-              </div>
-            ) : Object.keys(configsPorCategoria).length === 0 ? (
-              <div className="text-center py-8 text-slate-600">
-                <p>Nenhuma orientação cadastrada ainda.</p>
-                <Link
-                  href="/configuracoes"
-                  className="text-emerald-600 hover:text-emerald-700 font-medium"
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Paciente */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Paciente *
+                </label>
+                <select
+                  value={metadados.pacienteId}
+                  onChange={handlePacienteChange}
+                  disabled={loadingPacientes}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed"
                 >
-                  Cadastre orientações aqui
-                </Link>
+                  <option value="">
+                    {loadingPacientes ? 'Carregando...' : 'Selecione um paciente'}
+                  </option>
+                  {pacientes.map((paciente) => (
+                    <option key={paciente.id} value={paciente.id}>
+                      {paciente.nome_completo}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <div className="space-y-6">
-                {Object.entries(configsPorCategoria).map(
-                  ([categoria, configs]) => (
-                    <div key={categoria}>
-                      <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center">
-                        <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
-                        {categoria}
-                      </h3>
-                      <div className="space-y-3 ml-4">
-                        {configs.map((config: any) => (
-                          <div key={config.id} className="flex items-start">
-                            <input
-                              type="checkbox"
-                              id={`orientacao-${config.id}`}
-                              checked={formData.orientacoes_selecionadas.includes(
-                                config.id
-                              )}
-                              onChange={() => handleOrientacaoChange(config.id)}
-                              className="mt-1 w-4 h-4 accent-emerald-500 rounded border-slate-300 cursor-pointer"
-                            />
-                            <label
-                              htmlFor={`orientacao-${config.id}`}
-                              className="ml-3 cursor-pointer flex-1"
-                            >
-                              <div className="text-sm font-medium text-slate-900">
-                                {config.titulo}
-                              </div>
-                              <p className="text-xs text-slate-600 mt-1 line-clamp-2">
-                                {config.conteudo}
-                              </p>
-                            </label>
+
+              {/* Fase/Calorias */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Fase / Calorias
+                </label>
+                <input
+                  type="text"
+                  value={metadados.faseCaloricas}
+                  onChange={handleFaseChange}
+                  placeholder="Ex: Fase 1 - 1500 kcal"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Data */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Data</label>
+                <input
+                  type="date"
+                  value={metadados.dataPrescricao}
+                  onChange={handleDataChange}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SEÇÃO 2: REFEIÇÕES */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Refeições</h2>
+              <button
+                type="button"
+                onClick={adicionarRefeicao}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium transition"
+              >
+                <Plus className="w-4 h-4" /> Adicionar Refeição
+              </button>
+            </div>
+
+            {refeicoes.map((refeicao, index) => (
+              <div key={refeicao.id} className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
+                {/* Header da Refeição */}
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+                  <div className="flex-1">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Nome da Refeição
+                    </label>
+                    <input
+                      type="text"
+                      value={refeicao.nome}
+                      onChange={(e) =>
+                        atualizarRefeicao(refeicao.id, 'nome', e.target.value)
+                      }
+                      placeholder="Ex: Café da Manhã"
+                      className="px-4 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent w-full"
+                    />
+                  </div>
+                  {refeicoes.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removerRefeicao(refeicao.id)}
+                      className="ml-4 text-red-600 hover:text-red-700 transition"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Metas e Horário */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Horário
+                    </label>
+                    <input
+                      type="time"
+                      value={refeicao.horario}
+                      onChange={(e) =>
+                        atualizarRefeicao(refeicao.id, 'horario', e.target.value)
+                      }
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Meta Carboidratos (g)
+                    </label>
+                    <input
+                      type="number"
+                      value={refeicao.metaCarboidratos}
+                      onChange={(e) =>
+                        atualizarRefeicao(refeicao.id, 'metaCarboidratos', e.target.value)
+                      }
+                      placeholder="0"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Meta Proteínas (g)
+                    </label>
+                    <input
+                      type="number"
+                      value={refeicao.metaProteinas}
+                      onChange={(e) =>
+                        atualizarRefeicao(refeicao.id, 'metaProteinas', e.target.value)
+                      }
+                      placeholder="0"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Textarea de Alimentos */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Alimentos *
+                  </label>
+                  <textarea
+                    value={refeicao.alimentos}
+                    onChange={(e) =>
+                      atualizarRefeicao(refeicao.id, 'alimentos', e.target.value)
+                    }
+                    placeholder="Digite os alimentos e quantidades..."
+                    rows={5}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
+                {/* Accordion de Condutas */}
+                <button
+                  type="button"
+                  onClick={() => toggleExpandido(refeicao.id)}
+                  className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-300 px-4 py-3 rounded-lg transition"
+                >
+                  <span className="font-medium text-slate-900">Injetar Condutas/Orientações</span>
+                  <ChevronDown
+                    className={`w-5 h-5 text-slate-600 transition-transform ${
+                      refeicao.expandido ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* Conteúdo do Accordion */}
+                {refeicao.expandido && (
+                  <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    {Object.entries(configsPorCategoria).length > 0 ? (
+                      <div className="space-y-4">
+                        {Object.entries(configsPorCategoria).map(([categoria, configs]) => (
+                          <div key={categoria}>
+                            <h4 className="font-semibold text-slate-800 mb-2 text-sm">
+                              {categoria}
+                            </h4>
+                            <div className="space-y-2 pl-2">
+                              {configs.map((config) => (
+                                <label
+                                  key={config.id}
+                                  className="flex items-start gap-3 cursor-pointer hover:bg-white p-2 rounded transition"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    onChange={() =>
+                                      injetarConduta(refeicao.id, config.conteudo)
+                                    }
+                                    className="w-4 h-4 mt-1 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-slate-900">
+                                      {config.titulo}
+                                    </p>
+                                    <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                                      {config.conteudo}
+                                    </p>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )
+                    ) : (
+                      <p className="text-slate-600 text-sm">
+                        Nenhuma conduta pré-configurada disponível
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
+            ))}
           </div>
 
-          {/* Submit Button */}
-          <div className="flex gap-3 justify-end">
+          {/* SEÇÃO 3: TABELAS DE EQUIVALENTES */}
+          <div className="bg-white rounded-lg border border-slate-200 p-8 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-900 mb-6">
+              Tabelas de Equivalentes (Para anexar ao PDF)
+            </h2>
+
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-slate-50 rounded-lg transition">
+                <input
+                  type="checkbox"
+                  checked={tabelasSelecionadas.proteinas}
+                  onChange={() => toggleTabela('proteinas')}
+                  className="w-5 h-5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                />
+                <span className="font-medium text-slate-900">Tabela 1: Proteínas Animal</span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-slate-50 rounded-lg transition">
+                <input
+                  type="checkbox"
+                  checked={tabelasSelecionadas.substitutosArroz}
+                  onChange={() => toggleTabela('substitutosArroz')}
+                  className="w-5 h-5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                />
+                <span className="font-medium text-slate-900">Tabela 2: Substitutos de Arroz</span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-slate-50 rounded-lg transition">
+                <input
+                  type="checkbox"
+                  checked={tabelasSelecionadas.frutas}
+                  onChange={() => toggleTabela('frutas')}
+                  className="w-5 h-5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                />
+                <span className="font-medium text-slate-900">Tabela 3: Frutas</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Botões de Ação */}
+          <div className="flex gap-4 justify-end">
             <Link
               href="/"
-              className="px-6 py-2 border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+              className="px-6 py-3 border border-slate-300 rounded-lg text-slate-900 font-medium hover:bg-slate-50 transition"
             >
               Cancelar
             </Link>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-emerald-400 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed"
             >
-              {loading ? 'Salvando...' : '💾 Salvar Prescrição'}
+              {loading ? 'Salvando...' : 'Salvar Prescrição'}
             </button>
           </div>
         </form>

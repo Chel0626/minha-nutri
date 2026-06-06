@@ -1,7 +1,8 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/pacientes/novo/page": "app/pacientes/novo/page.js",
-  "/anamneses/nova/page": "app/anamneses/nova/page.js",
   "/page": "app/page.js",
-  "/prescricoes/nova/page": "app/prescricoes/nova/page.js"
+  "/prescricoes/nova/page": "app/prescricoes/nova/page.js",
+  "/pacientes/page": "app/pacientes/page.js",
+  "/pacientes/novo/page": "app/pacientes/novo/page.js",
+  "/prescricoes/page": "app/prescricoes/page.js"
 }
