@@ -1,7 +1,6 @@
 {
-  "/pacientes/page": "app/pacientes/page.js",
+  "/page": "app/page.js",
+  "/configuracoes/page": "app/configuracoes/page.js",
   "/prescricoes/page": "app/prescricoes/page.js",
-  "/anamneses/nova/page": "app/anamneses/nova/page.js",
-  "/pacientes/[id]/page": "app/pacientes/[id]/page.js",
-  "/prescricoes/[id]/page": "app/prescricoes/[id]/page.js"
+  "/prescricoes/nova/page": "app/prescricoes/nova/page.js"
 }
