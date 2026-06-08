@@ -174,7 +174,12 @@ export default function CriarPrescricao() {
         nome: '',
         metaCarboidratos: '',
         metaProteinas: '',
-        opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }],
+        opcoes: [
+          { 
+            id: `op-${Date.now()}`, 
+            itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] 
+          }
+        ],
         observacoes: '',
         expandido: false,
       },
@@ -198,7 +203,10 @@ export default function CriarPrescricao() {
             ...r,
             opcoes: [
               ...r.opcoes,
-              { id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] },
+              { 
+                id: `op-${Date.now()}`, 
+                itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] 
+              },
             ],
           };
         }
@@ -385,7 +393,13 @@ export default function CriarPrescricao() {
       let conteudoPrescricao = `PRESCRIÇÃO DIETÉTICA\n`;
       conteudoPrescricao += `Data: ${metadados.dataPrescricao}\n`;
       conteudoPrescricao += `Paciente: ${metadados.pacienteNome}\n`;
-      conteudoPrescricao += `Prescrição Dietética: ${metadados.faseCaloricas.toLowerCase().includes('kcal') ? metadados.faseCaloricas : metadados.faseCaloricas + ' kcal'}\n\n`;
+      
+      // Tratamento do Kcal ao salvar no banco de dados
+      const kcalFormatado = metadados.faseCaloricas.toLowerCase().includes('kcal') 
+        ? metadados.faseCaloricas 
+        : `${metadados.faseCaloricas} kcal`;
+      conteudoPrescricao += `Prescrição Dietética: ${kcalFormatado}\n\n`;
+      
       conteudoPrescricao += `${'='.repeat(60)}\n\n`;
 
       if (condutasGlobais.trim()) {
@@ -788,7 +802,9 @@ export default function CriarPrescricao() {
                                 <div className="text-slate-300 cursor-move">
                                   <GripVertical className="w-5 h-5" />
                                 </div>
-                                <BuscaAlimento onSelect={(nome, macros) => {
+                                <BuscaAlimento 
+                                  valorInicial={item.nome}
+                                  onSelect={(nome, macros) => {
                                     setRefeicoes(prev => prev.map(r => r.id === refeicao.id ? {
                                       ...r,
                                       opcoes: r.opcoes.map(o => o.id === opcao.id ? {
@@ -797,7 +813,6 @@ export default function CriarPrescricao() {
                                       } : o)
                                     } : r));
                                   }}
-                                  valorInicial={item.nome} 
                                 />
                                 <input
                                   type="text"
@@ -1087,14 +1102,21 @@ export default function CriarPrescricao() {
         </div>
 
         {/* Resumo */}
-        {metadados.faseCaloricas && (
-          <p className="text-justify mb-8 leading-relaxed font-sans">
-            <span className="font-bold text-[#1e3a8a]">Prescrição Dietética:</span>{' '}
-            {metadados.faseCaloricas}
-          </p>
-        )}
+        <p className="text-justify mb-10 leading-relaxed font-sans">
+  <span className="font-bold text-[#1e3a8a]">Prescrição Dietética:</span>{' '}
+  {(() => {
+    const valor = metadados.faseCaloricas || '';
+    // Se o valor estiver vazio, não imprime nada
+    if (!valor) return null;
+    
+    // Verifica se já contém "kcal" (ignora maiúsculas)
+    const jaTemKcal = valor.toLowerCase().includes('kcal');
+    
+    return jaTemKcal ? valor : `${valor} kcal`;
+  })()}
+</p>
 
-        {/* Condutas Gerais Impressas (Novo) */}
+        {/* Condutas Gerais Impressas */}
         {condutasGlobais.trim() && (
           <div className="mb-10 font-sans">
             <h3 className="text-[14pt] font-bold text-[#1e3a8a] mb-2">Orientações Gerais</h3>
@@ -1246,9 +1268,6 @@ export default function CriarPrescricao() {
                     ))}
                   </tbody>
                 </table>
-                <p className="text-[10pt] mt-2 font-bold text-gray-800">
-                  Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)
-                </p>
               </div>
             )}
 
