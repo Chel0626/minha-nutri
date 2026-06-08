@@ -6,11 +6,15 @@ import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
 import { ChevronDown, Plus, Trash2, Check, GripVertical } from 'lucide-react';
+import BuscaAlimento from '@/components/BuscaAlimento';
+
+const TACO_API_URL = "https://taco-api-464t.onrender.com";
 
 interface ItemAlimento {
   id: string;
   nome: string;
   quantidade: string;
+  macros?: { cho: number; ptn: number; lip: number };
 }
 
 interface Opcao {
@@ -241,6 +245,17 @@ export default function CriarPrescricao() {
 
   const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => {
     setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
+  };
+
+  const buscarAlimentos = async (termo: string) => {
+    if (termo.length < 3) return;
+    try {
+      const response = await fetch(`${TACO_API_URL}/buscar/${termo}`);
+      const data = await response.json();
+      return data.resultados;
+    } catch (err) {
+      console.error("Erro ao conectar com a API:", err);
+    }
   };
 
   // Salvar prescrição
@@ -498,12 +513,21 @@ export default function CriarPrescricao() {
                           <div className="text-slate-300 cursor-move">
                             <GripVertical className="w-5 h-5" />
                           </div>
-                          <input
-                            type="text"
-                            value={item.nome}
-                            onChange={(e) => atualizarItem(refeicao.id, opcao.id, item.id, 'nome', e.target.value)}
-                            placeholder="Alimento"
-                            className="flex-1 px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 text-sm"
+                          <BuscaAlimento
+                            valorInicial={item.nome}
+                            onSelect={(nome, macros) => {
+                              setRefeicoes(
+                                refeicoes.map((r) => ({
+                                  ...r,
+                                  opcoes: r.opcoes.map((o) => ({
+                                    ...o,
+                                    itens: o.itens.map((i) =>
+                                      i.id === item.id ? { ...i, nome, macros } : i
+                                    ),
+                                  })),
+                                }))
+                              );
+                            }}
                           />
                           <input
                             type="text"
@@ -512,10 +536,10 @@ export default function CriarPrescricao() {
                             placeholder="Qtd"
                             className="w-24 px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 text-sm"
                           />
-                          <div className="flex items-center gap-2 px-3 text-[10px] text-slate-400 font-mono bg-slate-100 rounded-md py-2 border border-slate-200 w-36 select-none">
-                            <span>C:--</span>
-                            <span>P:--</span>
-                            <span>L:--</span>
+                          <div className="flex items-center gap-2 px-3 text-[10px] text-slate-500 font-mono bg-slate-100 rounded-md py-2 border border-slate-200 w-36 select-none">
+                            <span>C:{item.macros?.cho || '--'}</span>
+                            <span>P:{item.macros?.ptn || '--'}</span>
+                            <span>L:{item.macros?.lip || '--'}</span>
                           </div>
                           <button
                             type="button"
