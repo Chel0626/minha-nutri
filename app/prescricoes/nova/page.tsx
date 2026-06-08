@@ -41,17 +41,21 @@ interface MetadadosPrescricion {
   dataPrescricao: string;
 }
 
+// Helper para extrair o valor numérico da quantidade (ex: "100g" -> 100)
 const parseQtd = (str: string) => {
   if (!str) return 0;
   const match = str.match(/[\d.,]+/);
   return match ? parseFloat(match[0].replace(',', '.')) : 0;
 };
 
+// ============================================================================
+// DADOS EMBUTIDOS DA TACO PARA AS TABELAS
+// ============================================================================
 const TABELA_PROTEINAS = [
   { nome: 'Frango (Peito, cozido)', base: 31.5 },
   { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 },
   { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 },
-  { nome: 'Lombo suíno (assado)', base: 35.7 },
+  { nome: 'Lombo suíno (assado)', base: 35.7 }
 ];
 
 const TABELA_ARROZ = [
@@ -61,7 +65,7 @@ const TABELA_ARROZ = [
   { nome: 'Inhame (cozido)', base: 23.5 },
   { nome: 'Mandioca (cozida)', base: 30.1 },
   { nome: 'Mandioquinha (cozida)', base: 18.9 },
-  { nome: 'Milho-verde (enlatado)', base: 17.1 },
+  { nome: 'Milho-verde (enlatado)', base: 17.1 }
 ];
 
 const TABELA_FRUTAS = [
@@ -75,7 +79,7 @@ const TABELA_FRUTAS = [
   { nome: 'Melancia', base: 6.8 },
   { nome: 'Melão', base: 7.5 },
   { nome: 'Morango', base: 6.8 },
-  { nome: 'Uva', base: 17.3 },
+  { nome: 'Uva', base: 17.3 }
 ];
 
 export default function CriarPrescricao() {
@@ -88,6 +92,10 @@ export default function CriarPrescricao() {
     faseCaloricas: '',
     dataPrescricao: new Date().toISOString().split('T')[0],
   });
+
+  // Novo estado global para as Condutas
+  const [condutasGlobais, setCondutasGlobais] = useState<string>('');
+  const [condutasExpandidas, setCondutasExpandidas] = useState(false);
 
   const [refeicoes, setRefeicoes] = useState<Refeicao[]>([
     {
@@ -110,7 +118,7 @@ export default function CriarPrescricao() {
   const [alvosTabelas, setAlvosTabelas] = useState({
     proteinas: '',
     substitutosArroz: '',
-    frutas: '',
+    frutas: ''
   });
 
   const [loading, setLoading] = useState(false);
@@ -127,7 +135,6 @@ export default function CriarPrescricao() {
   );
 
   // --- Handlers de Metadados ---
-
   const handlePacienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const pacienteId = e.target.value;
     const paciente = pacientes.find((p) => p.id === pacienteId);
@@ -142,8 +149,23 @@ export default function CriarPrescricao() {
     setMetadados({ ...metadados, dataPrescricao: e.target.value });
   };
 
-  // --- Handlers de Refeição ---
+  // --- Handlers de Condutas Globais ---
+  const toggleCondutaGlobal = (conteudo: string, checked: boolean) => {
+    let novoTexto = condutasGlobais || '';
+    if (checked) {
+      if (!novoTexto.includes(conteudo)) {
+        novoTexto = novoTexto ? `${novoTexto}\n\n${conteudo}` : conteudo;
+      }
+    } else {
+      novoTexto = novoTexto
+        .replace(`\n\n${conteudo}`, '')
+        .replace(`${conteudo}\n\n`, '')
+        .replace(conteudo, '');
+    }
+    setCondutasGlobais(novoTexto.trim());
+  };
 
+  // --- Handlers de Refeição ---
   const adicionarRefeicao = () => {
     setRefeicoes([
       ...refeicoes,
@@ -168,7 +190,6 @@ export default function CriarPrescricao() {
   };
 
   // --- Handlers de Opções ---
-
   const adicionarOpcao = (refeicaoId: string) => {
     setRefeicoes(
       refeicoes.map((r) => {
@@ -198,7 +219,6 @@ export default function CriarPrescricao() {
   };
 
   // --- Handlers de Itens ---
-
   const adicionarItem = (refeicaoId: string, opcaoId: string) => {
     setRefeicoes(
       refeicoes.map((r) => {
@@ -272,7 +292,6 @@ export default function CriarPrescricao() {
   };
 
   // --- Handlers de Engenharia Reversa ---
-
   const toggleMacroAtivo = (
     refeicaoId: string,
     opcaoId: string,
@@ -339,34 +358,6 @@ export default function CriarPrescricao() {
     );
   };
 
-  // --- Handlers de Condutas ---
-
-  const toggleExpandido = (id: string) => {
-    setRefeicoes(refeicoes.map((r) => (r.id === id ? { ...r, expandido: !r.expandido } : r)));
-  };
-
-  const toggleConduta = (refeicaoId: string, conteudo: string, checked: boolean) => {
-    setRefeicoes(
-      refeicoes.map((r) => {
-        if (r.id === refeicaoId) {
-          let novoTexto = r.observacoes || '';
-          if (checked) {
-            if (!novoTexto.includes(conteudo)) {
-              novoTexto = novoTexto ? `${novoTexto}\n\n${conteudo}` : conteudo;
-            }
-          } else {
-            novoTexto = novoTexto
-              .replace(`\n\n${conteudo}`, '')
-              .replace(`${conteudo}\n\n`, '')
-              .replace(conteudo, '');
-          }
-          return { ...r, observacoes: novoTexto.trim() };
-        }
-        return r;
-      })
-    );
-  };
-
   const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => {
     setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
   };
@@ -379,7 +370,6 @@ export default function CriarPrescricao() {
   };
 
   // --- Salvar no Supabase ---
-
   const handleSalvarPrescricao = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -395,8 +385,14 @@ export default function CriarPrescricao() {
       let conteudoPrescricao = `PRESCRIÇÃO DIETÉTICA\n`;
       conteudoPrescricao += `Data: ${metadados.dataPrescricao}\n`;
       conteudoPrescricao += `Paciente: ${metadados.pacienteNome}\n`;
-      conteudoPrescricao += `Prescrição Dietética: ${metadados.faseCaloricas}\n\n`;
+      conteudoPrescricao += `Prescrição Dietética: ${metadados.faseCaloricas.toLowerCase().includes('kcal') ? metadados.faseCaloricas : metadados.faseCaloricas + ' kcal'}\n\n`;
       conteudoPrescricao += `${'='.repeat(60)}\n\n`;
+
+      if (condutasGlobais.trim()) {
+        conteudoPrescricao += `CONDUTAS / ORIENTAÇÕES GERAIS\n`;
+        conteudoPrescricao += `${condutasGlobais.trim()}\n\n`;
+        conteudoPrescricao += `${'='.repeat(60)}\n\n`;
+      }
 
       refeicoes.forEach((ref) => {
         conteudoPrescricao += `${ref.nome.toUpperCase()}\n`;
@@ -467,6 +463,7 @@ export default function CriarPrescricao() {
         faseCaloricas: '',
         dataPrescricao: new Date().toISOString().split('T')[0],
       });
+      setCondutasGlobais('');
       setRefeicoes([
         {
           id: 'ref-1',
@@ -572,6 +569,72 @@ export default function CriarPrescricao() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* =========================================
+                NOVO BLOCO: CONDUTAS / ORIENTAÇÕES GERAIS
+                ========================================= */}
+            <div className="bg-white rounded-lg border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-900 mb-6">Condutas / Orientações Gerais</h2>
+              
+              <div className="mb-4">
+                <textarea
+                  value={condutasGlobais}
+                  onChange={(e) => setCondutasGlobais(e.target.value)}
+                  placeholder="Digite aqui orientações para a prescrição inteira ou selecione nas Condutas Padrão abaixo..."
+                  rows={4}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCondutasExpandidas(!condutasExpandidas)}
+                className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg"
+              >
+                <span className="font-medium text-slate-900">Condutas Padrão (Salvas no Banco)</span>
+                <ChevronDown
+                  className={`w-5 h-5 text-slate-600 transition-transform ${
+                    condutasExpandidas ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {condutasExpandidas && (
+                <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="space-y-4">
+                    {Object.entries(configsPorCategoria).map(([categoria, configs]) => (
+                      <div key={categoria}>
+                        <h4 className="font-semibold text-slate-800 mb-2 text-sm">
+                          {categoria}
+                        </h4>
+                        <div className="space-y-2 pl-2">
+                          {configs.map((config) => (
+                            <label
+                              key={config.id}
+                              className="flex items-start gap-3 cursor-pointer hover:bg-white p-2 rounded transition"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={condutasGlobais.includes(config.conteudo)}
+                                onChange={(e) =>
+                                  toggleCondutaGlobal(config.conteudo, e.target.checked)
+                                }
+                                className="w-4 h-4 mt-1 text-emerald-600 border-slate-300 rounded"
+                              />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-slate-900">
+                                  {config.titulo}
+                                </p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* REFEIÇÕES */}
@@ -725,31 +788,16 @@ export default function CriarPrescricao() {
                                 <div className="text-slate-300 cursor-move">
                                   <GripVertical className="w-5 h-5" />
                                 </div>
-                                <BuscaAlimento
-                                  valorInicial={item.nome}
-                                  onSelect={(nome, macros) => {
-                                    setRefeicoes((prev) =>
-                                      prev.map((r) =>
-                                        r.id === refeicao.id
-                                          ? {
-                                              ...r,
-                                              opcoes: r.opcoes.map((o) =>
-                                                o.id === opcao.id
-                                                  ? {
-                                                      ...o,
-                                                      itens: o.itens.map((i) =>
-                                                        i.id === item.id
-                                                          ? { ...i, nome, baseMacros: macros }
-                                                          : i
-                                                      ),
-                                                    }
-                                                  : o
-                                              ),
-                                            }
-                                          : r
-                                      )
-                                    );
+                                <BuscaAlimento onSelect={(nome, macros) => {
+                                    setRefeicoes(prev => prev.map(r => r.id === refeicao.id ? {
+                                      ...r,
+                                      opcoes: r.opcoes.map(o => o.id === opcao.id ? {
+                                        ...o,
+                                        itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros } : i)
+                                      } : o)
+                                    } : r));
                                   }}
+                                  valorInicial={item.nome} 
                                 />
                                 <input
                                   type="text"
@@ -883,68 +931,20 @@ export default function CriarPrescricao() {
                     </button>
                   </div>
 
-                  {/* Observações */}
+                  {/* Observações da Refeição (Somente manual agora) */}
                   <div className="mb-4">
                     <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Observações / Condutas da Refeição
+                      Observações
                     </label>
                     <textarea
                       value={refeicao.observacoes}
                       onChange={(e) => atualizarRefeicao(refeicao.id, 'observacoes', e.target.value)}
-                      placeholder="Orientações específicas..."
+                      placeholder="Orientações específicas ou opcionais apenas para esta refeição..."
                       rows={2}
                       className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none"
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => toggleExpandido(refeicao.id)}
-                    className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg"
-                  >
-                    <span className="font-medium text-slate-900">Condutas Padrão</span>
-                    <ChevronDown
-                      className={`w-5 h-5 text-slate-600 transition-transform ${
-                        refeicao.expandido ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {refeicao.expandido && (
-                    <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="space-y-4">
-                        {Object.entries(configsPorCategoria).map(([categoria, configs]) => (
-                          <div key={categoria}>
-                            <h4 className="font-semibold text-slate-800 mb-2 text-sm">
-                              {categoria}
-                            </h4>
-                            <div className="space-y-2 pl-2">
-                              {configs.map((config) => (
-                                <label
-                                  key={config.id}
-                                  className="flex items-start gap-3 cursor-pointer hover:bg-white p-2 rounded transition"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={refeicao.observacoes.includes(config.conteudo)}
-                                    onChange={(e) =>
-                                      toggleConduta(refeicao.id, config.conteudo, e.target.checked)
-                                    }
-                                    className="w-4 h-4 mt-1 text-emerald-600 border-slate-300 rounded"
-                                  />
-                                  <div className="flex-1">
-                                    <p className="text-sm font-medium text-slate-900">
-                                      {config.titulo}
-                                    </p>
-                                  </div>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -1059,7 +1059,10 @@ export default function CriarPrescricao() {
         </div>
       </div>
 
-      {/* Área de Impressão (PDF Layout) */}
+      {/* ========================================================
+        ÁREA DE IMPRESSÃO (PDF LAYOUT) - Fica invisível na tela
+        ========================================================
+      */}
       <div className="hidden print:block bg-white text-black font-serif max-w-[210mm] mx-auto p-12 text-[11pt]">
 
         {/* Cabeçalho */}
@@ -1085,10 +1088,20 @@ export default function CriarPrescricao() {
 
         {/* Resumo */}
         {metadados.faseCaloricas && (
-          <p className="text-justify mb-10 leading-relaxed font-sans">
+          <p className="text-justify mb-8 leading-relaxed font-sans">
             <span className="font-bold text-[#1e3a8a]">Prescrição Dietética:</span>{' '}
             {metadados.faseCaloricas}
           </p>
+        )}
+
+        {/* Condutas Gerais Impressas (Novo) */}
+        {condutasGlobais.trim() && (
+          <div className="mb-10 font-sans">
+            <h3 className="text-[14pt] font-bold text-[#1e3a8a] mb-2">Orientações Gerais</h3>
+            <p className="whitespace-pre-line text-[11pt] text-gray-800 leading-relaxed text-justify">
+              {condutasGlobais}
+            </p>
+          </div>
         )}
 
         {/* Loop de Refeições */}
@@ -1269,7 +1282,6 @@ export default function CriarPrescricao() {
                 </table>
               </div>
             )}
-
           </div>
         )}
 
