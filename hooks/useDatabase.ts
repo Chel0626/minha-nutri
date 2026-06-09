@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Paciente } from '@/types/database.types';
+// Importação corrigida: adicionado o PreConfiguracao aqui
+import { Paciente, PreConfiguracao } from '@/types/database.types';
 
 // Hook customizado para buscar pacientes do Supabase
 export function usePacientes() {
@@ -41,7 +42,7 @@ export function usePacientes() {
 
 // Hook customizado para buscar pré-configurações
 export function usePreConfiguracoes() {
-  const [preConfigs, setPreConfigs] = useState([]);
+  const [preConfigs, setPreConfigs] = useState<PreConfiguracao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
