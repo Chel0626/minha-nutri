@@ -24,7 +24,7 @@ export default function RootLayout({
             <div className="flex items-center justify-between h-16">
               {/* Logo / Título */}
               <div className="flex-shrink-0 flex items-center gap-2">
-                <span className="text-2xl">🍏</span>
+                <span className="text-2xl">🍊</span>
                 <span className="font-bold text-xl text-slate-800 tracking-tight">
                   Minha<span className="text-emerald-600">Nutri</span>
                 </span>

@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/page": [
+    "/calculadora/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/calculadora/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -11,10 +11,30 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/calculadora/page": [
+    "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/calculadora/page.js"
+      "static/chunks/app/page.js"
+    ],
+    "/prescricoes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/prescricoes/page.js"
+    ],
+    "/prescricoes/nova/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/prescricoes/nova/page.js"
+    ],
+    "/configuracoes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/configuracoes/page.js"
+    ],
+    "/pacientes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/pacientes/page.js"
     ]
   }
 }

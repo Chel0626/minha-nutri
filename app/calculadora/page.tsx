@@ -225,7 +225,7 @@ function TabCalorias({ onAvancar }: { onAvancar: (r: ResultadoCalorias, peso: nu
             <StyledInput value={idade} onChange={setIdade} placeholder="Ex: 30" step="1" min="1" max="120" />
           </div>
           <div>
-            <FieldLabel>Sexo biológico</FieldLabel>
+            <FieldLabel>Sexo</FieldLabel>
             <StyledSelect
               value={sexo}
               onChange={(v) => setSexo(v as Sexo)}

@@ -1,4 +1,7 @@
 {
   "/page": "app/page.js",
-  "/calculadora/page": "app/calculadora/page.js"
+  "/prescricoes/nova/page": "app/prescricoes/nova/page.js",
+  "/calculadora/page": "app/calculadora/page.js",
+  "/configuracoes/page": "app/configuracoes/page.js",
+  "/pacientes/page": "app/pacientes/page.js"
 }
