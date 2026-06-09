@@ -1,76 +1,57 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import useSWR from 'swr';
 import { supabase } from '@/lib/supabase';
-// Importação corrigida: adicionado o PreConfiguracao aqui
 import { Paciente, PreConfiguracao } from '@/types/database.types';
 
-// Hook customizado para buscar pacientes do Supabase
+// ------------------------------------------------------------------
+// FETCHERS (As funções que ensinam o SWR a ir buscar no Supabase)
+// ------------------------------------------------------------------
+const fetcherPacientes = async () => {
+  const { data, error } = await supabase
+    .from('pacientes')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as Paciente[];
+};
+
+const fetcherPreConfiguracoes = async () => {
+  const { data, error } = await supabase
+    .from('pre_configuracoes')
+    .select('*')
+    .order('categoria', { ascending: true });
+
+  if (error) throw error;
+  return data as PreConfiguracao[];
+};
+
+// ------------------------------------------------------------------
+// HOOKS CUSTOMIZADOS COM SWR (Cache embutido)
+// ------------------------------------------------------------------
+
+// Hook customizado para buscar pacientes
 export function usePacientes() {
-  const [pacientes, setPacientes] = useState<Paciente[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // O primeiro parâmetro 'cache_pacientes' é a "gaveta" onde o SWR guarda os dados
+  const { data, error, isLoading, mutate } = useSWR<Paciente[]>('cache_pacientes', fetcherPacientes);
 
-  useEffect(() => {
-    fetchPacientes();
-  }, []);
-
-  const fetchPacientes = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data, error: err } = await supabase
-        .from('pacientes')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (err) throw err;
-
-      setPacientes(data || []);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao carregar pacientes';
-      setError(message);
-      console.error('Erro ao buscar pacientes:', err);
-    } finally {
-      setLoading(false);
-    }
+  return { 
+    pacientes: data || [], 
+    loading: isLoading, 
+    error: error?.message || null, 
+    refetch: mutate // O mutate forçará a atualização na hora, útil após salvar um novo paciente
   };
-
-  return { pacientes, loading, error, refetch: fetchPacientes };
 }
 
 // Hook customizado para buscar pré-configurações
 export function usePreConfiguracoes() {
-  const [preConfigs, setPreConfigs] = useState<PreConfiguracao[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, isLoading, mutate } = useSWR<PreConfiguracao[]>('cache_pre_configs', fetcherPreConfiguracoes);
 
-  useEffect(() => {
-    fetchPreConfiguracoes();
-  }, []);
-
-  const fetchPreConfiguracoes = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data, error: err } = await supabase
-        .from('pre_configuracoes')
-        .select('*')
-        .order('categoria', { ascending: true });
-
-      if (err) throw err;
-
-      setPreConfigs(data || []);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao carregar pré-configurações';
-      setError(message);
-      console.error('Erro ao buscar pré-configurações:', err);
-    } finally {
-      setLoading(false);
-    }
+  return { 
+    preConfigs: data || [], 
+    loading: isLoading, 
+    error: error?.message || null, 
+    refetch: mutate 
   };
-
-  return { preConfigs, loading, error, refetch: fetchPreConfiguracoes };
 }
