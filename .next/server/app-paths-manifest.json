@@ -1,4 +1,4 @@
 {
-  "/prescricoes/nova/page": "app/prescricoes/nova/page.js",
-  "/prescricoes/page": "app/prescricoes/page.js"
+  "/page": "app/page.js",
+  "/calculadora/page": "app/calculadora/page.js"
 }

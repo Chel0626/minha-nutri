@@ -11,15 +11,10 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/prescricoes/page": [
+    "/calculadora/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/prescricoes/page.js"
-    ],
-    "/prescricoes/nova/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/prescricoes/nova/page.js"
+      "static/chunks/app/calculadora/page.js"
     ]
   }
 }

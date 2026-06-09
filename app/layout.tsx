@@ -44,6 +44,9 @@ export default function RootLayout({
                 <Link href="/configuracoes" className="text-slate-600 hover:text-emerald-600 font-medium transition-colors">
                   Condutas Padrão
                 </Link>
+                <Link href="/calculadora" className="text-slate-600 hover:text-emerald-600 font-medium transition-colors">
+                  Calculadora
+                </Link>
               </div>
             </div>
           </div>
