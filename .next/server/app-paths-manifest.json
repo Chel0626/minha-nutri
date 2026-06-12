@@ -1,6 +1,4 @@
 {
-  "/prescricoes/page": "app/prescricoes/page.js",
   "/prescricoes/nova/page": "app/prescricoes/nova/page.js",
-  "/page": "app/page.js",
-  "/calculadora/page": "app/calculadora/page.js"
+  "/api/assinar/route": "app/api/assinar/route.js"
 }

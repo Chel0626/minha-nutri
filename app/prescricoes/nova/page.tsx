@@ -5,8 +5,12 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
-import { ChevronDown, Plus, Trash2, Check, GripVertical, Target, Printer } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Check, GripVertical, Target, Printer, FileSignature, X, Loader2 } from 'lucide-react';
 import BuscaAlimento from '@/components/BuscaAlimento';
+
+// Importações novas para gerar o PDF
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const TACO_API_URL = "https://taco-api-464t.onrender.com";
 
@@ -124,6 +128,13 @@ export default function CriarPrescricao() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // --- Estados do Modal de Assinatura ---
+  const [isSignModalOpen, setIsSignModalOpen] = useState(false);
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [certPassword, setCertPassword] = useState('');
+  const [isSigning, setIsSigning] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
 
   const configsPorCategoria = preConfigs.reduce(
     (acc, config: PreConfiguracao) => {
@@ -394,7 +405,6 @@ export default function CriarPrescricao() {
       conteudoPrescricao += `Data: ${metadados.dataPrescricao}\n`;
       conteudoPrescricao += `Paciente: ${metadados.pacienteNome}\n`;
       
-      // Tratamento do Kcal ao salvar no banco de dados
       const kcalFormatado = metadados.faseCaloricas.toLowerCase().includes('kcal') 
         ? metadados.faseCaloricas 
         : `${metadados.faseCaloricas} kcal`;
@@ -499,8 +509,122 @@ export default function CriarPrescricao() {
     }
   };
 
+  // --- LÓGICA DE ASSINATURA DIGITAL ---
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]); 
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  // Helper para converter ArrayBuffer para Base64 (Evita corrupção do PDF no formato binário)
+  const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  };
+
+  const handleAssinar = async () => {
+    if (!certFile || !certPassword) {
+      setSignError('Por favor, selecione o certificado e digite a senha.');
+      return;
+    }
+    setIsSigning(true);
+    setSignError(null);
+
+    try {
+      const element = document.getElementById('print-area');
+      if (!element) throw new Error("Área de impressão não encontrada");
+
+      // Truque: Torna o elemento visível só pro html2canvas ler
+      element.classList.remove('hidden');
+      element.classList.remove('print:block');
+      
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      
+      // Esconde de novo pro usuário não ver a tela piscar
+      element.classList.add('hidden');
+      element.classList.add('print:block');
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      let heightLeft = pdfHeight;
+      let position = 0;
+      let currentPage = 1;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        currentPage++;
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // Adicionando o Carimbo Visual da Assinatura na última página
+      pdf.setPage(currentPage);
+      pdf.setFontSize(9);
+      pdf.setTextColor(30, 58, 138); // Azul escuro
+      pdf.text('ASSINADO DIGITALMENTE POR:', 15, pageHeight - 20);
+      pdf.setFont("helvetica", "bold");
+      pdf.text('CAROLINA MACEDO - CRN 29096', 15, pageHeight - 15);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(100, 100, 100); // Cinza
+      pdf.text(`Data da assinatura: ${new Date().toLocaleString('pt-BR')}`, 15, pageHeight - 10);
+      pdf.text(`Verificável via ICP-Brasil`, 15, pageHeight - 5);
+
+      // Usando ArrayBuffer para preservar a estrutura binária perfeita do PDF
+      const pdfArrayBuffer = pdf.output('arraybuffer');
+      const pdfBase64 = arrayBufferToBase64(pdfArrayBuffer);
+      const certBase64 = await convertFileToBase64(certFile);
+
+      const response = await fetch('/api/assinar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfBase64, certBase64, password: certPassword })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Erro ao assinar documento. Verifique a senha.');
+      }
+
+      const data = await response.json();
+
+      const link = document.createElement('a');
+      link.href = `data:application/pdf;base64,${data.signedPdf}`;
+      link.download = `Prescricao_${metadados.pacienteNome || 'Paciente'}_Assinada.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setIsSignModalOpen(false);
+      setCertPassword('');
+      setCertFile(null);
+    } catch (err: any) {
+      setSignError(err.message || 'Ocorreu um erro inesperado ao assinar.');
+    } finally {
+      setIsSigning(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 relative">
 
       {/* Interface do Sistema (Escondida na Impressão) */}
       <div className="print:hidden">
@@ -510,15 +634,24 @@ export default function CriarPrescricao() {
               <h1 className="text-3xl font-bold text-slate-900">Criar Prescrição</h1>
               <p className="text-slate-600 text-sm mt-1">Estruture a prescrição com opções e alimentos</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition"
+                className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition"
               >
-                <Printer className="w-4 h-4" /> Imprimir PDF
+                <Printer className="w-4 h-4" /> Imprimir 
               </button>
-              <Link href="/" className="text-emerald-600 hover:text-emerald-700 font-medium text-sm">
+              
+              <button
+                type="button"
+                onClick={() => setIsSignModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition shadow-sm"
+              >
+                <FileSignature className="w-4 h-4" /> Assinar PDF
+              </button>
+
+              <Link href="/" className="text-emerald-600 hover:text-emerald-700 font-medium text-sm ml-2">
                 ← Voltar
               </Link>
             </div>
@@ -1078,7 +1211,7 @@ export default function CriarPrescricao() {
         ÁREA DE IMPRESSÃO (PDF LAYOUT) - Fica invisível na tela
         ========================================================
       */}
-      <div className="hidden print:block bg-white text-black font-serif max-w-[210mm] mx-auto p-12 text-[11pt]">
+      <div id="print-area" className="hidden print:block bg-white text-black font-serif max-w-[210mm] mx-auto p-12 text-[11pt]">
 
         {/* Cabeçalho */}
         <div className="border-b-2 border-[#1e3a8a] pb-2 mb-4 flex justify-between items-end">
@@ -1103,18 +1236,18 @@ export default function CriarPrescricao() {
 
         {/* Resumo */}
         <p className="text-justify mb-10 leading-relaxed font-sans">
-  <span className="font-bold text-[#1e3a8a]">Prescrição Dietética:</span>{' '}
-  {(() => {
-    const valor = metadados.faseCaloricas || '';
-    // Se o valor estiver vazio, não imprime nada
-    if (!valor) return null;
-    
-    // Verifica se já contém "kcal" (ignora maiúsculas)
-    const jaTemKcal = valor.toLowerCase().includes('kcal');
-    
-    return jaTemKcal ? valor : `${valor} kcal`;
-  })()}
-</p>
+          <span className="font-bold text-[#1e3a8a]">Prescrição Dietética:</span>{' '}
+          {(() => {
+            const valor = metadados.faseCaloricas || '';
+            // Se o valor estiver vazio, não imprime nada
+            if (!valor) return null;
+            
+            // Verifica se já contém "kcal" (ignora maiúsculas)
+            const jaTemKcal = valor.toLowerCase().includes('kcal');
+            
+            return jaTemKcal ? valor : `${valor} kcal`;
+          })()}
+        </p>
 
         {/* Condutas Gerais Impressas */}
         {condutasGlobais.trim() && (
@@ -1268,6 +1401,9 @@ export default function CriarPrescricao() {
                     ))}
                   </tbody>
                 </table>
+                <p className="text-[10pt] mt-2 font-bold text-gray-800">
+                  Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)
+                </p>
               </div>
             )}
 
@@ -1305,6 +1441,73 @@ export default function CriarPrescricao() {
         )}
 
       </div>
+
+      {/* ========================================================
+          MODAL DE ASSINATURA DIGITAL
+          ======================================================== */}
+      {isSignModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <FileSignature className="w-5 h-5 text-blue-600" /> Assinatura Digital
+              </h3>
+              <button onClick={() => !isSigning && setIsSignModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-5">
+              {signError && (
+                <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
+                  {signError}
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">1. Certificado A1 (.pfx)</label>
+                <input 
+                  type="file" 
+                  accept=".pfx,.p12"
+                  onChange={(e) => setCertFile(e.target.files ? e.target.files[0] : null)}
+                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  disabled={isSigning}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">2. Senha do Certificado</label>
+                <input 
+                  type="password"
+                  value={certPassword}
+                  onChange={(e) => setCertPassword(e.target.value)}
+                  placeholder="Digite a senha..."
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isSigning}
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button 
+                onClick={() => setIsSignModalOpen(false)}
+                disabled={isSigning}
+                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleAssinar}
+                disabled={isSigning}
+                className="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:bg-blue-400"
+              >
+                {isSigning ? <><Loader2 className="w-4 h-4 animate-spin" /> Assinando...</> : 'Assinar Documento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
