@@ -545,17 +545,17 @@ export default function CriarPrescricao() {
       const element = document.getElementById('print-area');
       if (!element) throw new Error("Área de impressão não encontrada");
 
-      // Truque: Torna o elemento visível só pro html2canvas ler
-      element.classList.remove('hidden');
-      element.classList.remove('print:block');
+      // Truque: Torna o elemento visível
+      element.classList.remove('hidden', 'print:block');
       
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      // OTIMIZAÇÃO 1: scale 1.5 reduz pela metade o tamanho da "foto"
+      const canvas = await html2canvas(element, { scale: 1.5, useCORS: true });
       
-      // Esconde de novo pro usuário não ver a tela piscar
-      element.classList.add('hidden');
-      element.classList.add('print:block');
+      element.classList.add('hidden', 'print:block');
 
-      const imgData = canvas.toDataURL('image/png');
+      // OTIMIZAÇÃO 2: Salva como JPEG com 80% de qualidade (Reduz o peso absurdo do PNG)
+      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -565,34 +565,56 @@ export default function CriarPrescricao() {
       let position = 0;
       let currentPage = 1;
 
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      // Usando 'JPEG' no addImage
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
       heightLeft -= pageHeight;
 
-      while (heightLeft >= 0) {
+      while (heightLeft > 0) {
         position = heightLeft - pdfHeight;
         pdf.addPage();
         currentPage++;
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
         heightLeft -= pageHeight;
       }
 
-      // Adicionando o Carimbo Visual da Assinatura na última página
+      // =======================================================
+      // CARIMBO VISUAL DE ASSINATURA (ESTÉTICA ADOBE)
+      // =======================================================
       pdf.setPage(currentPage);
-      pdf.setFontSize(9);
-      pdf.setTextColor(30, 58, 138); // Azul escuro
-      pdf.text('ASSINADO DIGITALMENTE POR:', 15, pageHeight - 20);
-      pdf.setFont("helvetica", "bold");
-      pdf.text('CAROLINA MACEDO - CRN 29096', 15, pageHeight - 15);
-      pdf.setFont("helvetica", "normal");
-      pdf.setTextColor(100, 100, 100); // Cinza
-      pdf.text(`Data da assinatura: ${new Date().toLocaleString('pt-BR')}`, 15, pageHeight - 10);
-      pdf.text(`Verificável via ICP-Brasil`, 15, pageHeight - 5);
+      
+      pdf.setDrawColor(30, 58, 138); 
+      pdf.setLineWidth(0.4);
+      pdf.setFillColor(250, 252, 255); 
+      pdf.roundedRect(15, pageHeight - 35, 95, 22, 2, 2, 'FD'); 
 
-      // Usando ArrayBuffer para preservar a estrutura binária perfeita do PDF
+      pdf.setLineWidth(0.2);
+      pdf.line(45, pageHeight - 35, 45, pageHeight - 13);
+
+      pdf.setFontSize(7);
+      pdf.setFont("helvetica", "italic");
+      pdf.setTextColor(30, 58, 138);
+      pdf.text('Assinado de forma', 18, pageHeight - 25);
+      pdf.text('digital por', 18, pageHeight - 21);
+
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(0, 0, 0); 
+      pdf.text('CAROLINA MACEDO', 48, pageHeight - 27);
+      
+      pdf.setFontSize(7);
+      pdf.setFont("helvetica", "normal");
+      pdf.text('CRN: 29096', 48, pageHeight - 22);
+      
+      const dataAtual = new Date();
+      const formatDataAdobe = `${dataAtual.toLocaleDateString('pt-BR')} ${dataAtual.toLocaleTimeString('pt-BR')} -03'00'`;
+      pdf.text(`Dados: ${formatDataAdobe}`, 48, pageHeight - 17);
+      // =======================================================
+
       const pdfArrayBuffer = pdf.output('arraybuffer');
       const pdfBase64 = arrayBufferToBase64(pdfArrayBuffer);
       const certBase64 = await convertFileToBase64(certFile);
 
+      // Dispara para a nova rota que suporta 15MB
       const response = await fetch('/api/assinar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -601,7 +623,7 @@ export default function CriarPrescricao() {
 
       if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.error || 'Erro ao assinar documento. Verifique a senha.');
+        throw new Error(errData.error || 'Erro ao assinar documento.');
       }
 
       const data = await response.json();
