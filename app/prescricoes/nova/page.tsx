@@ -578,36 +578,42 @@ export default function CriarPrescricao() {
       }
 
       // =======================================================
-      // CARIMBO VISUAL DE ASSINATURA (ESTÉTICA ADOBE)
+      // CARIMBO VISUAL DE ASSINATURA (ESTÉTICA EXATA DA ADOBE)
       // =======================================================
       pdf.setPage(currentPage);
       
-      pdf.setDrawColor(30, 58, 138); 
-      pdf.setLineWidth(0.4);
-      pdf.setFillColor(250, 252, 255); 
-      pdf.roundedRect(15, pageHeight - 35, 95, 22, 2, 2, 'FD'); 
+      // Coordenada Y base (altura onde o carimbo vai ficar na página)
+      const baseY = pageHeight - 30;
+      const nomeCompleto = 'Carolina de Souza Silva Macedo';
 
-      pdf.setLineWidth(0.2);
-      pdf.line(45, pageHeight - 35, 45, pageHeight - 13);
-
-      pdf.setFontSize(7);
-      pdf.setFont("helvetica", "italic");
-      pdf.setTextColor(30, 58, 138);
-      pdf.text('Assinado de forma', 18, pageHeight - 25);
-      pdf.text('digital por', 18, pageHeight - 21);
-
-      pdf.setFontSize(9);
-      pdf.setFont("helvetica", "bold");
-      pdf.setTextColor(0, 0, 0); 
-      pdf.text('CAROLINA MACEDO', 48, pageHeight - 27);
-      
-      pdf.setFontSize(7);
+      // 1. NOME GRANDE (Lado Esquerdo)
+      pdf.setTextColor(0, 0, 0); // Cor preta
       pdf.setFont("helvetica", "normal");
-      pdf.text('CRN: 29096', 48, pageHeight - 22);
+      pdf.setFontSize(16); // Tamanho da fonte grande
+      pdf.text(nomeCompleto, 25, baseY);
+
+      // Calcula o tamanho exato do nome para posicionar os textos pequenos colados nele
+      const tamanhoNome = pdf.getTextWidth(nomeCompleto);
+      const inicioTextoDireita = 25 + tamanhoNome + 3; // 3mm de margem entre o nome e o texto
+
+      // 2. TEXTOS PEQUENOS (Lado Direito)
+      pdf.setFontSize(8); 
       
+      // Linha de cima
+      pdf.text(`Assinado de forma digital por ${nomeCompleto}`, inicioTextoDireita, baseY - 2.5);
+      
+      // Montando a data no formato exato: YYYY.MM.DD HH:MM:SS -03'00'
       const dataAtual = new Date();
-      const formatDataAdobe = `${dataAtual.toLocaleDateString('pt-BR')} ${dataAtual.toLocaleTimeString('pt-BR')} -03'00'`;
-      pdf.text(`Dados: ${formatDataAdobe}`, 48, pageHeight - 17);
+      const ano = dataAtual.getFullYear();
+      const mes = String(dataAtual.getMonth() + 1).padStart(2, '0');
+      const dia = String(dataAtual.getDate()).padStart(2, '0');
+      const hora = String(dataAtual.getHours()).padStart(2, '0');
+      const min = String(dataAtual.getMinutes()).padStart(2, '0');
+      const sec = String(dataAtual.getSeconds()).padStart(2, '0');
+      const formatDataAdobe = `${ano}.${mes}.${dia} ${hora}:${min}:${sec} -03'00'`;
+      
+      // Linha de baixo
+      pdf.text(`Dados: ${formatDataAdobe}`, inicioTextoDireita, baseY + 1.5);
       // =======================================================
 
       const pdfArrayBuffer = pdf.output('arraybuffer');

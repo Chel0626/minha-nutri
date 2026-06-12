@@ -1,5 +1,3 @@
 {
-  "/page": "app/page.js",
-  "/prescricoes/page": "app/prescricoes/page.js",
   "/prescricoes/nova/page": "app/prescricoes/nova/page.js"
 }
