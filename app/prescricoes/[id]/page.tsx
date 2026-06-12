@@ -8,7 +8,7 @@ import { Printer, ArrowLeft } from 'lucide-react';
 
 export default function VisualizarPrescricao() {
   const params = useParams();
-  const id = params.id as string;
+  const id = params?.id as string;
 
   const [prescricao, setPrescricao] = useState<any>(null);
   const [loading, setLoading] = useState(true);
