@@ -11,7 +11,7 @@ import {
 
 export default function PerfilPaciente() {
   const params = useParams();
-  const id = params.id as string;
+  const id = params?.id as string;
 
   const [paciente, setPaciente] = useState<any>(null);
   const [anamneses, setAnamneses] = useState<any[]>([]);
