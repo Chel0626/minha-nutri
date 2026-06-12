@@ -356,15 +356,21 @@ function TabMacros({ caloriasIniciais, pesoInicial }: { caloriasIniciais?: numbe
     lista[idx] = { ...lista[idx], [campo]: newVal };
 
     if (redistribuirAuto && lista.length > 1 && delta !== 0) {
-      const peers = lista.filter((_, i) => i !== idx);
-      const base = Math.floor(delta / peers.length);
-      const resto = Math.abs(delta % peers.length);
-      let peerCount = 0;
+      const sign = Math.sign(delta); // 1 (se removeu) ou -1 (se adicionou)
+      const absDelta = Math.abs(delta);
+      const peersCount = lista.length - 1;
+
+      // Base arredondada multiplicada pelo sinal para não quebrar a matemática
+      const base = Math.floor(absDelta / peersCount) * sign; 
+      const resto = absDelta % peersCount;
+
+      let distribuido = 0;
       lista.forEach((_, i) => {
         if (i !== idx) {
-          const extra = peerCount < resto ? (delta > 0 ? 1 : -1) : 0;
+          // Os primeiros 'resto' itens recebem o ajuste de +1 ou -1 extra
+          const extra = distribuido < resto ? sign : 0;
           lista[i] = { ...lista[i], [campo]: lista[i][campo] + base + extra };
-          peerCount++;
+          distribuido++;
         }
       });
     }
