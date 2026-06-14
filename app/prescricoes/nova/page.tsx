@@ -12,8 +12,6 @@ import BuscaAlimento from '@/components/BuscaAlimento';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
-const TACO_API_URL = "https://taco-api-464t.onrender.com";
-
 interface ItemAlimento {
   id: string;
   nome: string;

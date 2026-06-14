@@ -18,7 +18,7 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
     const delayDebounce = setTimeout(async () => {
       if (query.length > 2) {
         try {
-          const res = await fetch(`https://taco-api-464t.onrender.com/buscar/${query}`);
+          const res = await fetch(`/api/alimentos?busca=${query}`);
           const data = await res.json();
           setResultados(data.resultados || []);
           setAberto(true);
