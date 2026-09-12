@@ -1,10 +1,10 @@
-'use client'; // <--- Adicione esta linha bem aqui no topo!
+'use client';
 
 import { useState, useEffect, useRef } from 'react';
 
 interface Props {
   valorInicial: string;
-  onSelect: (nome: string, macros: { cho: number, ptn: number, lip: number }) => void;
+  onSelect: (nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string) => void;
 }
 
 export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
@@ -12,6 +12,20 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
   const [resultados, setResultados] = useState([]);
   const [aberto, setAberto] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Trava para não abrir sozinho ao carregar a página
+  const isInitialRender = useRef(true); 
+
+  // Fecha a lista se o usuário clicar fora dela
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setAberto(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Debounce da busca
   useEffect(() => {
@@ -21,12 +35,20 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
           const res = await fetch(`/api/alimentos?busca=${query}`);
           const data = await res.json();
           setResultados(data.resultados || []);
-          setAberto(true);
+          
+          // Só abre o dropdown se não for o primeiro carregamento da tela
+          if (!isInitialRender.current) {
+            setAberto(true);
+          }
         } catch (error) {
           console.error("Erro na busca:", error);
         }
+      } else {
+        setResultados([]);
       }
+      isInitialRender.current = false;
     }, 300);
+    
     return () => clearTimeout(delayDebounce);
   }, [query]);
 
@@ -38,10 +60,13 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
         placeholder="Buscar alimento..."
         value={query}
         onChange={(e) => {
+          isInitialRender.current = false; // Registra que o usuário interagiu
           setQuery(e.target.value);
-          onSelect(e.target.value, { cho: 0, ptn: 0, lip: 0 });
+          onSelect(e.target.value, { cho: 0, ptn: 0, lip: 0 }, '');
         }}
-        onFocus={() => setAberto(true)}
+        onFocus={() => {
+          if (resultados.length > 0) setAberto(true);
+        }}
       />
       
       {aberto && resultados.length > 0 && (
@@ -52,7 +77,11 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
               className="px-3 py-2 hover:bg-emerald-50 cursor-pointer text-sm"
               onClick={() => {
                 setQuery(alimento.nome_exibicao);
-                onSelect(alimento.nome_exibicao, { cho: alimento.cho, ptn: alimento.ptn, lip: alimento.lip });
+                onSelect(
+                  alimento.nome_exibicao, 
+                  { cho: alimento.cho, ptn: alimento.ptn, lip: alimento.lip },
+                  alimento.id
+                );
                 setAberto(false);
               }}
             >

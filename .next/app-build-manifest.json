@@ -11,15 +11,15 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/prescricoes/page": [
+    "/pacientes/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/prescricoes/page.js"
+      "static/chunks/app/pacientes/page.js"
     ],
-    "/prescricoes/nova/page": [
+    "/pacientes/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/prescricoes/nova/page.js"
+      "static/chunks/app/pacientes/[id]/page.js"
     ]
   }
 }
