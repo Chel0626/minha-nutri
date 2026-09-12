@@ -20,6 +20,26 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/prescricoes/nova/page.js"
+    ],
+    "/pacientes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/pacientes/page.js"
+    ],
+    "/pacientes/[id]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/pacientes/[id]/page.js"
+    ],
+    "/prescricoes/[id]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/prescricoes/[id]/page.js"
+    ],
+    "/pacientes/novo/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/pacientes/novo/page.js"
     ]
   }
 }
