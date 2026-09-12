@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
-import { ChevronDown, Plus, Trash2, Check, GripVertical, Target, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target } from 'lucide-react';
 import BuscaAlimento from '@/components/BuscaAlimento';
 
 import html2canvas from 'html2canvas';
@@ -33,13 +33,10 @@ interface Bloco {
   tipo: TipoBloco;
   nome?: string;
   metaCarboidratos?: string;
-  metaProteinas?: string;
-  opcoes?: Opcao[];
-  observacoes?: string;
-  expandido?: boolean;
-  colapsado?: boolean;
+  opcoes?: Opcao[]; // <-- De volta ao bloco!
   titulo?: string;
-  conteudoTexto?: string;
+  conteudoTexto: string; 
+  expandido?: boolean;
 }
 
 interface ItemTabela {
@@ -53,7 +50,7 @@ interface ItemTabela {
 interface MetadadosPrescricion {
   pacienteId: string;
   pacienteNome: string;
-  faseCaloricas: string;
+  faseCaloricas: string; 
   dataPrescricao: string;
 }
 
@@ -63,6 +60,7 @@ const parseQtd = (str: string) => {
   return match ? parseFloat(match[0].replace(',', '.')) : 0;
 };
 
+// Bases fixas iniciais
 const TABELA_PROTEINAS = [
   { nome: 'Frango (Peito, cozido)', base: 31.5 },
   { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 },
@@ -81,65 +79,79 @@ const TABELA_ARROZ = [
 ];
 
 const TABELA_FRUTAS = [
+  { nome: 'Abacate', base: 6.0 },
   { nome: 'Abacaxi', base: 12.3 },
+  { nome: 'Ameixa Fresca', base: 11.4 },
+  { nome: 'Amora', base: 9.6 },
+  { nome: 'Atemoia', base: 25.3 },
+  { nome: 'Banana Maçã', base: 26.0 },
+  { nome: 'Banana Nanica', base: 23.8 },
   { nome: 'Banana Prata', base: 26.0 },
-  { nome: 'Goiaba', base: 13.0 },
-  { nome: 'Laranja', base: 8.9 },
-  { nome: 'Mamão', base: 11.6 },
-  { nome: 'Manga', base: 15.0 },
-  { nome: 'Maçã', base: 15.2 },
+  { nome: 'Caju', base: 10.7 },
+  { nome: 'Caqui', base: 19.3 },
+  { nome: 'Carambola', base: 6.7 },
+  { nome: 'Cereja Fresca', base: 16.0 },
+  { nome: 'Coco Fresco', base: 15.2 },
+  { nome: 'Figo Fresco', base: 19.2 },
+  { nome: 'Framboesa', base: 11.9 },
+  { nome: 'Goiaba Branca', base: 12.4 },
+  { nome: 'Goiaba Vermelha', base: 13.0 },
+  { nome: 'Graviola', base: 16.8 },
+  { nome: 'Jabuticaba', base: 15.3 },
+  { nome: 'Jaca', base: 22.5 },
+  { nome: 'Kiwi', base: 14.7 },
+  { nome: 'Laranja Lima', base: 11.5 },
+  { nome: 'Laranja Pêra', base: 8.9 },
+  { nome: 'Limão', base: 9.3 },
+  { nome: 'Maçã Fuji', base: 15.2 },
+  { nome: 'Maçã Gala', base: 13.8 },
+  { nome: 'Maçã Verde', base: 13.6 },
+  { nome: 'Maracujá', base: 23.4 },
   { nome: 'Melancia', base: 6.8 },
   { nome: 'Melão', base: 7.5 },
+  { nome: 'Mirtilo (Blueberry)', base: 14.5 },
   { nome: 'Morango', base: 6.8 },
-  { nome: 'Uva', base: 17.3 }
+  { nome: 'Nectarina', base: 10.5 },
+  { nome: 'Pera', base: 15.2 },
+  { nome: 'Pêssego Fresco', base: 9.5 },
+  { nome: 'Pitaia (Pitaya)', base: 11.8 },
+  { nome: 'Romã', base: 18.7 },
+  { nome: 'Tangerina / Mexerica', base: 13.3 },
+  { nome: 'Uva Rubi', base: 17.3 },
+  { nome: 'Uva Thompson', base: 18.1 }
 ];
 
 export default function CriarPrescricao() {
-  const { pacientes, loading: loadingPacientes } = usePacientes();
-  const { preConfigs, loading: loadingConfigs } = usePreConfiguracoes();
+  const { pacientes } = usePacientes();
+  const { preConfigs } = usePreConfiguracoes();
 
-  const [metadadosColapsado, setMetadadosColapsado] = useState(false);
-  const [tabelasColapsadas, setTabelasColapsadas] = useState(true);
-
+  const dataAtual = new Date().toLocaleDateString('pt-BR');
   const [metadados, setMetadados] = useState<MetadadosPrescricion>({
     pacienteId: '',
     pacienteNome: '',
     faseCaloricas: '',
-    dataPrescricao: new Date().toISOString().split('T')[0],
+    dataPrescricao: dataAtual,
   });
 
+  const [tabelasColapsadas, setTabelasColapsadas] = useState(true);
+
+  // Blocos iniciais
   const [blocos, setBlocos] = useState<Bloco[]>([
-    {
-      id: `cond-${Date.now()}`,
-      tipo: 'condutas',
-      conteudoTexto: '',
-      expandido: false,
-      colapsado: false,
-    },
     {
       id: `ref-${Date.now()}`,
       tipo: 'refeicao',
       nome: 'Café da Manhã',
-      metaCarboidratos: '',
-      metaProteinas: '',
-      opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }],
-      observacoes: '',
-      expandido: false,
-      colapsado: false,
+      metaCarboidratos: 'até 30g de Carboidratos',
+      conteudoTexto: '',
+      opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }]
     },
   ]);
 
   const [tabelasSelecionadas, setTabelasSelecionadas] = useState({
-    proteinas: false,
-    substitutosArroz: false,
-    frutas: false,
+    proteinas: false, substitutosArroz: false, frutas: false,
   });
 
-  const [alvosTabelas, setAlvosTabelas] = useState({
-    proteinas: '',
-    substitutosArroz: '',
-    frutas: ''
-  });
+  const [alvosTabelas, setAlvosTabelas] = useState({ proteinas: '', substitutosArroz: '', frutas: '' });
 
   const [tabelaProteinas, setTabelaProteinas] = useState<ItemTabela[]>(
     TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 } }))
@@ -157,11 +169,7 @@ export default function CriarPrescricao() {
 
   const [modalEdicao, setModalEdicao] = useState({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '' });
   const [salvandoAlimento, setSalvandoAlimento] = useState(false);
-
-  const caloriasCalculadas = 
-    (parseFloat(modalEdicao.cho) || 0) * 4 + 
-    (parseFloat(modalEdicao.ptn) || 0) * 4 + 
-    (parseFloat(modalEdicao.lip) || 0) * 9;
+  const caloriasCalculadas = (parseFloat(modalEdicao.cho) || 0) * 4 + (parseFloat(modalEdicao.ptn) || 0) * 4 + (parseFloat(modalEdicao.lip) || 0) * 9;
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [certFile, setCertFile] = useState<File | null>(null);
@@ -184,35 +192,24 @@ export default function CriarPrescricao() {
     setMetadados({ ...metadados, pacienteId, pacienteNome: paciente?.nome_completo || '' });
   };
 
-  const handleFaseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMetadados({ ...metadados, faseCaloricas: e.target.value });
-  };
+  const handleDataChange = (e: React.ChangeEvent<HTMLInputElement>) => setMetadados({ ...metadados, dataPrescricao: e.target.value });
 
-  const handleDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMetadados({ ...metadados, dataPrescricao: e.target.value });
-  };
-
+  // --- Handlers de Blocos ---
   const adicionarBloco = (tipo: TipoBloco) => {
-    const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, colapsado: false };
+    const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, conteudoTexto: '' };
     if (tipo === 'refeicao') {
       novoBloco.nome = '';
       novoBloco.metaCarboidratos = '';
-      novoBloco.metaProteinas = '';
       novoBloco.opcoes = [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }];
-      novoBloco.observacoes = '';
     } else if (tipo === 'texto_livre') {
       novoBloco.titulo = 'Título da Sessão';
-      novoBloco.conteudoTexto = '';
     } else if (tipo === 'condutas') {
-      novoBloco.conteudoTexto = '';
       novoBloco.expandido = false;
     }
     setBlocos([...blocos, novoBloco]);
   };
 
-  const removerBloco = (id: string) => {
-    setBlocos(blocos.filter(b => b.id !== id));
-  };
+  const removerBloco = (id: string) => setBlocos(blocos.filter(b => b.id !== id));
 
   const moverBloco = (index: number, direcao: 'cima' | 'baixo') => {
     if (direcao === 'cima' && index === 0) return;
@@ -223,9 +220,7 @@ export default function CriarPrescricao() {
     setBlocos(novosBlocos);
   };
 
-  const atualizarBloco = (id: string, campo: keyof Bloco, valor: any) => {
-    setBlocos(blocos.map(b => (b.id === id ? { ...b, [campo]: valor } : b)));
-  };
+  const atualizarBloco = (id: string, campo: keyof Bloco, valor: any) => setBlocos(blocos.map(b => (b.id === id ? { ...b, [campo]: valor } : b)));
 
   const toggleCondutaBloco = (blocoId: string, conteudo: string, checked: boolean) => {
     setBlocos(blocos.map(b => {
@@ -242,78 +237,43 @@ export default function CriarPrescricao() {
     }));
   };
 
+  const handleTextareaResize = (e: React.ChangeEvent<HTMLTextAreaElement>, blocoId: string) => {
+    e.target.style.height = 'auto';
+    e.target.style.height = e.target.scrollHeight + 'px';
+    atualizarBloco(blocoId, 'conteudoTexto', e.target.value);
+  };
+
+  // --- Handlers da "Calculadora" de Refeições ---
   const adicionarOpcao = (blocoId: string) => {
-    setBlocos(blocos.map((b) => {
-      if (b.id === blocoId && b.tipo === 'refeicao') {
-        return { ...b, opcoes: [...(b.opcoes || []), { id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }] };
-      }
-      return b;
-    }));
+    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: [...(b.opcoes || []), { id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }] } : b));
   };
 
   const removerOpcao = (blocoId: string, opcaoId: string) => {
-    setBlocos(blocos.map((b) => {
-      if (b.id === blocoId && b.tipo === 'refeicao') {
-        return { ...b, opcoes: (b.opcoes || []).filter((o) => o.id !== opcaoId) };
-      }
-      return b;
-    }));
+    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).filter((o) => o.id !== opcaoId) } : b));
   };
 
   const adicionarItem = (blocoId: string, opcaoId: string) => {
-    setBlocos(blocos.map((b) => {
-      if (b.id === blocoId && b.tipo === 'refeicao') {
-        return {
-          ...b,
-          opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: [...o.itens, { id: `it-${Date.now()}`, quantidade: '', nome: '' }] } : o),
-        };
-      }
-      return b;
-    }));
+    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
+      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: [...o.itens, { id: `it-${Date.now()}`, quantidade: '', nome: '' }] } : o),
+    } : b));
   };
 
   const removerItem = (blocoId: string, opcaoId: string, itemId: string) => {
-    setBlocos(blocos.map((b) => {
-      if (b.id === blocoId && b.tipo === 'refeicao') {
-        return {
-          ...b,
-          opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: o.itens.filter((i) => i.id !== itemId) } : o),
-        };
-      }
-      return b;
-    }));
+    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
+      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: o.itens.filter((i) => i.id !== itemId) } : o),
+    } : b));
   };
 
   const atualizarItem = (blocoId: string, opcaoId: string, itemId: string, campo: keyof ItemAlimento, valor: any) => {
-    setBlocos(blocos.map((b) => {
-      if (b.id === blocoId && b.tipo === 'refeicao') {
-        return {
-          ...b,
-          opcoes: (b.opcoes || []).map((o) => {
-            if (o.id === opcaoId) {
-              return { ...o, itens: o.itens.map((i) => i.id === itemId ? { ...i, [campo]: valor } : i) };
-            }
-            return o;
-          }),
-        };
-      }
-      return b;
-    }));
+    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
+      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: o.itens.map((i) => i.id === itemId ? { ...i, [campo]: valor } : i) } : o),
+    } : b));
   };
 
   const toggleMacroAtivo = (blocoId: string, opcaoId: string, itemId: string, macro: 'cho' | 'ptn' | 'lip' | null) => {
-    setBlocos(blocos.map((b) =>
-      b.id === blocoId && b.tipo === 'refeicao'
-        ? {
-            ...b,
-            opcoes: (b.opcoes || []).map((o) =>
-              o.id === opcaoId
-                ? { ...o, itens: o.itens.map((i) => i.id === itemId ? { ...i, macroAtivo: macro, macroAlvo: '' } : i) }
-                : o
-            ),
-          }
-        : b
-    ));
+    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
+      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: o.itens.map((i) => i.id === itemId ? { ...i, macroAtivo: macro, macroAlvo: '' } : i) } : o),
+    } : b));
   };
 
   const atualizarAlvoMacro = (blocoId: string, opcaoId: string, itemId: string, valor: string) => {
@@ -333,8 +293,7 @@ export default function CriarPrescricao() {
                 const base = i.baseMacros[i.macroAtivo];
                 if (base > 0 && !isNaN(target)) {
                   const pesoExato = (target * 100) / base;
-                  const pesoArredondado = Math.round(pesoExato / 5) * 5;
-                  newQtd = `${pesoArredondado}g`;
+                  newQtd = `${Math.round(pesoExato / 5) * 5}g`;
                 } else if (base === 0) {
                   newQtd = '0g';
                 }
@@ -347,9 +306,8 @@ export default function CriarPrescricao() {
     }));
   };
 
-  const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => {
-    setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
-  };
+  // --- Handlers das Tabelas Dinâmicas ---
+  const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
 
   const adicionarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas') => {
     const newItem = { id: `tab-${Date.now()}`, nome: '', baseMacro: 0 };
@@ -364,16 +322,9 @@ export default function CriarPrescricao() {
     if (tabela === 'frutas') setTabelaFrutas(prev => prev.filter(i => i.id !== id));
   };
 
-  const atualizarItemTabela = (
-    tabela: 'proteinas' | 'arroz' | 'frutas',
-    id: string,
-    nome: string,
-    macros: { cho: number, ptn: number, lip: number },
-    dbId?: string
-  ) => {
+  const atualizarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas', id: string, nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string) => {
     const baseMacro = tabela === 'proteinas' ? macros.ptn : macros.cho;
     const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, nome, baseMacro, macrosReal: macros, dbId } : i);
-
     if (tabela === 'proteinas') setTabelaProteinas(updateFn);
     else if (tabela === 'arroz') setTabelaArroz(updateFn);
     else if (tabela === 'frutas') setTabelaFrutas(updateFn);
@@ -382,195 +333,112 @@ export default function CriarPrescricao() {
   const calcularPesoEquivalente = (alvo: string, baseMacro: number) => {
     const alvoNum = parseFloat(alvo);
     if (isNaN(alvoNum) || baseMacro === 0) return '--';
-    const pesoExato = (alvoNum * 100) / baseMacro;
-    return `${Math.round(pesoExato / 5) * 5}g`;
+    return `${Math.round(((alvoNum * 100) / baseMacro) / 5) * 5}g`;
   };
 
   const handleAtualizarAlimento = async () => {
-    if (!modalEdicao.nome.trim()) {
-      alert("O nome do alimento não pode estar vazio.");
-      return;
-    }
+    if (!modalEdicao.nome.trim()) { alert("O nome do alimento não pode estar vazio."); return; }
     setSalvandoAlimento(true);
-
     try {
-      const dadosSalvar = {
-        nome_exibicao: modalEdicao.nome,
-        cho: parseFloat(modalEdicao.cho) || 0,
-        ptn: parseFloat(modalEdicao.ptn) || 0,
-        lip: parseFloat(modalEdicao.lip) || 0,
-        kcal: caloriasCalculadas
-      };
-
-      if (modalEdicao.id) {
-        const { error } = await supabase.from('alimentos').update(dadosSalvar).eq('id', modalEdicao.id);
-        if (error) throw error;
-      } else {
-        const novoId = `custom_${Date.now()}`;
-        const { error } = await supabase.from('alimentos').insert([{ id: novoId, ...dadosSalvar }]);
-        if (error) throw error;
-      }
-
+      const dadosSalvar = { nome_exibicao: modalEdicao.nome, cho: parseFloat(modalEdicao.cho) || 0, ptn: parseFloat(modalEdicao.ptn) || 0, lip: parseFloat(modalEdicao.lip) || 0, kcal: caloriasCalculadas };
+      if (modalEdicao.id) await supabase.from('alimentos').update(dadosSalvar).eq('id', modalEdicao.id);
+      else await supabase.from('alimentos').insert([{ id: `custom_${Date.now()}`, ...dadosSalvar }]);
       setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '' });
-    } catch (err) {
-      console.error("Erro ao atualizar alimento:", err);
-      alert("Erro ao salvar o alimento.");
-    } finally {
-      setSalvandoAlimento(false);
-    }
+    } catch (err) { alert("Erro ao salvar o alimento."); } 
+    finally { setSalvandoAlimento(false); }
   };
 
+  // --- Geração do Texto para Salvar e Imprimir ---
   const handleSalvarPrescricao = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    if (!metadados.pacienteId) {
-      setError('Por favor, selecione um paciente');
-      return;
-    }
+    if (!metadados.pacienteId) { setError('Por favor, selecione um paciente no cabeçalho.'); return; }
 
     try {
       setLoading(true);
-
-      let conteudoPrescricao = `PRESCRIÇÃO DIETÉTICA\n`;
-      conteudoPrescricao += `Data: ${metadados.dataPrescricao}\n`;
-      conteudoPrescricao += `Paciente: ${metadados.pacienteNome}\n`;
-      
-      const kcalFormatado = metadados.faseCaloricas.toLowerCase().includes('kcal') 
-        ? metadados.faseCaloricas 
-        : `${metadados.faseCaloricas} kcal`;
-      conteudoPrescricao += `Prescrição Dietética: ${kcalFormatado}\n\n`;
-      conteudoPrescricao += `${'='.repeat(60)}\n\n`;
+      let txt = `Nutrição e Educação em Diabetes\nPaciente: ${metadados.pacienteNome}\nData: ${metadados.dataPrescricao}\n\n`;
+      txt += `${'-'.repeat(60)}\n\n`;
 
       blocos.forEach((bloco) => {
-        if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
-          conteudoPrescricao += `CONDUTAS / ORIENTAÇÕES GERAIS\n`;
-          conteudoPrescricao += `${bloco.conteudoTexto.trim()}\n\n`;
-          conteudoPrescricao += `${'='.repeat(60)}\n\n`;
-        } else if (bloco.tipo === 'texto_livre' && bloco.conteudoTexto?.trim()) {
-          if (bloco.titulo) conteudoPrescricao += `${bloco.titulo.toUpperCase()}\n`;
-          conteudoPrescricao += `${bloco.conteudoTexto.trim()}\n\n`;
-          conteudoPrescricao += `${'='.repeat(60)}\n\n`;
-        } else if (bloco.tipo === 'refeicao' && bloco.nome) {
-          conteudoPrescricao += `${bloco.nome.toUpperCase()}\n`;
-
-          if (bloco.metaCarboidratos || bloco.metaProteinas) {
-            conteudoPrescricao += `META INSULINA: `;
-            if (bloco.metaCarboidratos)
-              conteudoPrescricao += `até ${bloco.metaCarboidratos}g de Carboidratos`;
-            if (bloco.metaCarboidratos && bloco.metaProteinas)
-              conteudoPrescricao += ` | `;
-            if (bloco.metaProteinas)
-              conteudoPrescricao += `Proteína: ${bloco.metaProteinas}g`;
-            conteudoPrescricao += `\n`;
-          }
-
-          (bloco.opcoes || []).forEach((opcao, idx) => {
-            const temItensPreenchidos = opcao.itens.some((i) => i.nome.trim() || i.quantidade.trim());
-            if (temItensPreenchidos) {
-              if (bloco.opcoes!.length > 1) {
-                conteudoPrescricao += `\nOpção ${idx + 1}:\n`;
-              } else {
-                conteudoPrescricao += `\n`;
-              }
-              opcao.itens.forEach((item) => {
-                if (item.nome.trim() || item.quantidade.trim()) {
-                  const textoQuantidade = item.quantidade.trim() ? `${item.quantidade.trim()} ` : '';
-                  conteudoPrescricao += `• ${textoQuantidade}${item.nome.trim()}\n`;
+        if (bloco.tipo === 'condutas' || bloco.tipo === 'texto_livre') {
+          if (bloco.titulo) txt += `${bloco.titulo.toUpperCase()}\n`;
+          txt += `${bloco.conteudoTexto.trim()}\n\n`;
+        } else if (bloco.tipo === 'refeicao') {
+          txt += `${(bloco.nome || '').toUpperCase()}\n`;
+          if (bloco.metaCarboidratos) txt += `META para INSULINA: ${bloco.metaCarboidratos}\n`;
+          
+          const temOpcoesPreenchidas = (bloco.opcoes || []).some(o => o.itens.some(i => i.nome || i.quantidade));
+          
+          if (temOpcoesPreenchidas || bloco.conteudoTexto?.trim()) {
+            if (bloco.conteudoTexto?.trim()) {
+              txt += `\nSugestão (Texto Livre):\n${bloco.conteudoTexto.trim()}\n`;
+            }
+            if (temOpcoesPreenchidas) {
+              (bloco.opcoes || []).forEach((opcao, idx) => {
+                const temItens = opcao.itens.some(i => i.nome.trim() || i.quantidade.trim());
+                if (temItens) {
+                  txt += (bloco.opcoes!.length > 1) ? `\nOpção ${idx + 1}:\n` : `\nSugestão:\n`;
+                  opcao.itens.forEach((item) => {
+                    if (item.nome.trim() || item.quantidade.trim()) {
+                      const qtd = item.quantidade.trim() ? `${item.quantidade.trim()} ` : '';
+                      txt += `+ ${qtd}${item.nome.trim()}\n`;
+                    }
+                  });
                 }
               });
             }
-          });
-
-          if (bloco.observacoes?.trim()) {
-            conteudoPrescricao += `\nObs: ${bloco.observacoes}\n\n`;
-          } else {
-            conteudoPrescricao += `\n\n`;
           }
+          txt += `\n`;
         }
       });
 
       if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) {
-        conteudoPrescricao += `${'='.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'='.repeat(60)}\n`;
-        tabelaProteinas.forEach(item => {
-          if (item.nome) conteudoPrescricao += `• ${item.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}\n`;
-        });
-        conteudoPrescricao += `• Ovos - Ajustar (1 ovo = ~6g ptn)\n\n`;
+        txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`;
+        tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro)}\n`; });
+        txt += `\n`;
       }
-      
       if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) {
-        conteudoPrescricao += `${'='.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'='.repeat(60)}\n`;
-        tabelaArroz.forEach(item => {
-          if (item.nome) conteudoPrescricao += `• ${item.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}\n`;
-        });
-        conteudoPrescricao += `• Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)\n\n`;
+        txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`;
+        tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro)}\n`; });
+        txt += `\n`;
       }
-
       if (tabelasSelecionadas.frutas && alvosTabelas.frutas) {
-        conteudoPrescricao += `${'='.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'='.repeat(60)}\n`;
-        tabelaFrutas.forEach(item => {
-          if (item.nome) conteudoPrescricao += `• ${item.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}\n`;
-        });
-        conteudoPrescricao += `\n`;
+        txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`;
+        tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro)}\n`; });
+        txt += `\n`;
       }
 
-      const { error: insertError } = await supabase.from('prescricoes').insert([
-        {
-          paciente_id: metadados.pacienteId,
-          cardapio_texto: conteudoPrescricao,
-          orientacoes_selecionadas: [],
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      const { error: insertError } = await supabase.from('prescricoes').insert([{
+        paciente_id: metadados.pacienteId,
+        cardapio_texto: txt,
+        orientacoes_selecionadas: [],
+      }]);
 
       if (insertError) throw insertError;
-
       setSuccess(true);
-      setMetadados({ pacienteId: '', pacienteNome: '', faseCaloricas: '', dataPrescricao: new Date().toISOString().split('T')[0] });
-      setBlocos([
-        { id: `cond-${Date.now()}`, tipo: 'condutas', conteudoTexto: '', expandido: false, colapsado: false },
-        { id: `ref-${Date.now()}`, tipo: 'refeicao', nome: 'Café da Manhã', metaCarboidratos: '', metaProteinas: '', opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }], observacoes: '', expandido: false, colapsado: false }
-      ]);
-      setTabelasSelecionadas({ proteinas: false, substitutosArroz: false, frutas: false });
-
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar prescrição');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Erro ao salvar prescrição'); } 
+    finally { setLoading(false); }
   };
 
   const convertFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => {
-        const result = reader.result as string;
-        resolve(result.split(',')[1]); 
-      };
+      reader.onload = () => resolve((reader.result as string).split(',')[1]); 
       reader.onerror = error => reject(error);
     });
   };
-
   const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
     let binary = '';
     const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
     return window.btoa(binary);
   };
 
   const handleAssinar = async () => {
-    if (!certFile || !certPassword) {
-      setSignError('Por favor, selecione o certificado e digite a senha.');
-      return;
-    }
-    setIsSigning(true);
-    setSignError(null);
-
+    if (!certFile || !certPassword) { setSignError('Selecione o certificado e digite a senha.'); return; }
+    setIsSigning(true); setSignError(null);
     try {
       const element = document.getElementById('print-area');
       if (!element) throw new Error("Área de impressão não encontrada");
@@ -584,725 +452,465 @@ export default function CriarPrescricao() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      let heightLeft = pdfHeight;
-      let position = 0;
-      let currentPage = 1;
+      let heightLeft = pdfHeight, position = 0, currentPage = 1;
 
       pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
       heightLeft -= pageHeight;
-
       while (heightLeft > 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        currentPage++;
+        position = heightLeft - pdfHeight; pdf.addPage(); currentPage++;
         pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
         heightLeft -= pageHeight;
       }
 
       pdf.setPage(currentPage);
       const baseY = pageHeight - 30;
-      const nomeCompleto = 'Carolina de Souza Silva Macedo';
-
-      pdf.setTextColor(0, 0, 0);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(16);
-      pdf.text(nomeCompleto, 25, baseY);
-
-      const tamanhoNome = pdf.getTextWidth(nomeCompleto);
-      const inicioTextoDireita = 25 + tamanhoNome + 3;
-
+      pdf.setTextColor(0, 0, 0); pdf.setFontSize(16);
+      pdf.text('Carolina de Souza Silva Macedo', 25, baseY);
       pdf.setFontSize(8); 
-      pdf.text(`Assinado de forma digital por ${nomeCompleto}`, inicioTextoDireita, baseY - 2.5);
+      pdf.text(`Assinado de forma digital por Carolina de Souza Silva Macedo`, 25 + pdf.getTextWidth('Carolina de Souza Silva Macedo') + 3, baseY - 2.5);
       
-      const dataAtual = new Date();
-      const ano = dataAtual.getFullYear();
-      const mes = String(dataAtual.getMonth() + 1).padStart(2, '0');
-      const dia = String(dataAtual.getDate()).padStart(2, '0');
-      const hora = String(dataAtual.getHours()).padStart(2, '0');
-      const min = String(dataAtual.getMinutes()).padStart(2, '0');
-      const sec = String(dataAtual.getSeconds()).padStart(2, '0');
-      const formatDataAdobe = `${ano}.${mes}.${dia} ${hora}:${min}:${sec} -03'00'`;
-      
-      pdf.text(`Dados: ${formatDataAdobe}`, inicioTextoDireita, baseY + 1.5);
-
       const pdfArrayBuffer = pdf.output('arraybuffer');
-      const pdfBase64 = arrayBufferToBase64(pdfArrayBuffer);
-      const certBase64 = await convertFileToBase64(certFile);
-
       const response = await fetch('/api/assinar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfBase64, certBase64, password: certPassword })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfBase64: arrayBufferToBase64(pdfArrayBuffer), certBase64: await convertFileToBase64(certFile), password: certPassword })
       });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Erro ao assinar documento.');
-      }
+      if (!response.ok) throw new Error((await response.json()).error || 'Erro ao assinar documento.');
 
       const data = await response.json();
-
       const link = document.createElement('a');
       link.href = `data:application/pdf;base64,${data.signedPdf}`;
       link.download = `Prescricao_${metadados.pacienteNome || 'Paciente'}_Assinada.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
 
-      setIsSignModalOpen(false);
-      setCertPassword('');
-      setCertFile(null);
-    } catch (err: any) {
-      setSignError(err.message || 'Ocorreu um erro inesperado ao assinar.');
-    } finally {
-      setIsSigning(false);
-    }
+      setIsSignModalOpen(false); setCertPassword(''); setCertFile(null);
+    } catch (err: any) { setSignError(err.message || 'Erro inesperado.'); } 
+    finally { setIsSigning(false); }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 relative pb-20">
-      <div className="print:hidden">
-        <div className="bg-white border-b border-slate-200 shadow-sm">
-          <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900">Construtor de Prescrição</h1>
-              <p className="text-slate-600 text-sm mt-1">Adicione e reordene blocos como quiser</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition"
-              >
-                <Printer className="w-4 h-4" /> Imprimir 
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => setIsSignModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition shadow-sm"
-              >
-                <FileSignature className="w-4 h-4" /> Assinar PDF
-              </button>
-
-              <Link href="/" className="text-emerald-600 hover:text-emerald-700 font-medium text-sm ml-2">
-                ← Voltar
-              </Link>
-            </div>
+    <div className="min-h-screen bg-slate-100 relative pb-20 font-sans">
+      
+      {/* BARRA SUPERIOR DE AÇÕES */}
+      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/pacientes" className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
+            ← Voltar
+          </Link>
+          <div className="flex items-center gap-3">
+            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition text-sm">
+              <Printer className="w-4 h-4" /> Imprimir 
+            </button>
+            <button onClick={() => setIsSignModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition shadow-sm text-sm">
+              <FileSignature className="w-4 h-4" /> Assinar PDF
+            </button>
+            <button onClick={handleSalvarPrescricao} disabled={loading} className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:bg-slate-400 transition text-sm shadow-sm">
+              {loading ? 'Salvando...' : 'Salvar Dieta'}
+            </button>
           </div>
         </div>
+      </div>
 
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          <form onSubmit={handleSalvarPrescricao} className="space-y-6">
+      <div className="max-w-4xl mx-auto mt-8 print:hidden">
+        {success && <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 text-green-700 mx-4"><Check className="w-5 h-5" /> Prescrição salva!</div>}
+        {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-red-700 mx-4">✗ {error}</div>}
 
-            {success && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 text-green-700">
-                <Check className="w-5 h-5" /> Prescrição salva com sucesso!
-              </div>
-            )}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-                ✗ {error}
-              </div>
-            )}
-
-            {/* CABEÇALHO / METADADOS (Colapsável) */}
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-              <div 
-                className="bg-slate-50 px-8 py-5 border-b border-slate-200 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => setMetadadosColapsado(!metadadosColapsado)}
+        {/* =========================================================
+            O "PAPEL" DO EDITOR (ESTILO WORD)
+            ========================================================= */}
+        <div className="bg-white shadow-xl border border-slate-200 min-h-[1056px] w-full mx-auto p-10 sm:p-16 mb-8 rounded-sm">
+          
+          {/* Cabeçalho Fixo do Documento */}
+          <div className="mb-10 text-slate-800">
+            <h1 className="text-[15pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</h1>
+            
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[13pt] text-[#1e3a8a]">Paciente:</span>
+              <select
+                value={metadados.pacienteId}
+                onChange={handlePacienteChange}
+                className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300 cursor-pointer"
               >
-                <h2 className="text-xl font-bold text-slate-900">Cabeçalho (Metadados)</h2>
-                <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${metadadosColapsado ? 'rotate-180' : ''}`} />
-              </div>
-              
-              {!metadadosColapsado && (
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Paciente *</label>
-                      <select
-                        value={metadados.pacienteId}
-                        onChange={handlePacienteChange}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      >
-                        <option value="">Selecione um paciente</option>
-                        {pacientes.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nome_completo}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Resumo Nutricional
-                      </label>
-                      <input
-                        type="text"
-                        value={metadados.faseCaloricas}
-                        onChange={handleFaseChange}
-                        placeholder="Ex: Aprox 1400kcal, 25% prot..."
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Data / Ajuste
-                      </label>
-                      <input
-                        type="text"
-                        value={metadados.dataPrescricao}
-                        onChange={handleDataChange}
-                        placeholder="Ex: 06/06/2026 (ajuste...)"
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+                <option value="">Selecione...</option>
+                {pacientes.map((p) => <option key={p.id} value={p.id}>{p.nome_completo}</option>)}
+              </select>
             </div>
 
-            {/* RENDERIZAÇÃO DOS BLOCOS ADICIONÁVEIS */}
+            <hr className="border-t border-dashed border-slate-400 my-4" />
+            
+            <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
+            <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
+            
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[11pt] text-[#1e3a8a]">Data:</span>
+              <input 
+                type="text" 
+                value={metadados.dataPrescricao} 
+                onChange={handleDataChange} 
+                className="text-[11pt] text-[#1e3a8a] w-32 outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300"
+              />
+            </div>
+
+            <h2 className="text-[13pt] font-bold underline mt-8 mb-6 text-black">Distribuição dos carboidratos por refeição:</h2>
+          </div>
+
+          {/* RENDERIZAÇÃO DOS BLOCOS */}
+          <div className="space-y-6">
             {blocos.map((bloco, index) => (
-              <div key={bloco.id} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden group">
+              <div key={bloco.id} className="relative group border border-transparent hover:border-slate-200 rounded-lg p-4 -mx-4 transition-colors">
                 
-                {/* Cabeçalho do Bloco */}
-                <div 
-                  className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
-                  onClick={() => atualizarBloco(bloco.id, 'colapsado', !bloco.colapsado)}
-                >
-                  <div className="flex items-center gap-2 font-bold text-slate-700 uppercase text-xs tracking-wider">
-                    {bloco.tipo === 'condutas' && <><ListChecks className="w-4 h-4 text-slate-500"/> Condutas Padrão</>}
-                    {bloco.tipo === 'texto_livre' && <><Type className="w-4 h-4 text-slate-500"/> Texto Livre</>}
-                    {bloco.tipo === 'refeicao' && <><Utensils className="w-4 h-4 text-slate-500"/> Refeição</>}
-                    
-                    {bloco.colapsado && (
-                      <span className="ml-2 text-slate-400 normal-case font-medium truncate max-w-[200px] md:max-w-md">
-                        {bloco.tipo === 'refeicao' ? `- ${bloco.nome || 'Sem horário'}` : ''}
-                        {bloco.tipo === 'texto_livre' ? `- ${bloco.titulo || 'Sem título'}` : ''}
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button type="button" onClick={() => moverBloco(index, 'cima')} disabled={index === 0} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowUp className="w-4 h-4"/></button>
-                      <button type="button" onClick={() => moverBloco(index, 'baixo')} disabled={index === blocos.length - 1} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowDown className="w-4 h-4"/></button>
-                      <div className="w-px h-4 bg-slate-300 mx-2"></div>
-                      <button type="button" onClick={() => removerBloco(bloco.id)} className="p-1.5 text-red-400 hover:text-red-700"><Trash2 className="w-4 h-4"/></button>
-                    </div>
-                    <button type="button" onClick={() => atualizarBloco(bloco.id, 'colapsado', !bloco.colapsado)} className="p-1.5 text-slate-500 hover:text-slate-800 ml-1">
-                      <ChevronDown className={`w-5 h-5 transition-transform ${bloco.colapsado ? 'rotate-180' : ''}`} />
-                    </button>
-                  </div>
+                {/* Controles Flutuantes (Só aparecem no hover) */}
+                <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-white shadow-sm border border-slate-200 rounded-md px-1 py-0.5 z-10">
+                  <button type="button" onClick={() => moverBloco(index, 'cima')} disabled={index === 0} className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowUp className="w-4 h-4"/></button>
+                  <button type="button" onClick={() => moverBloco(index, 'baixo')} disabled={index === blocos.length - 1} className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowDown className="w-4 h-4"/></button>
+                  <div className="w-px h-3 bg-slate-300 mx-1"></div>
+                  <button type="button" onClick={() => removerBloco(bloco.id)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
                 </div>
 
-                {/* Conteúdo do Bloco */}
-                {!bloco.colapsado && (
-                  <div className="p-6">
-                    {bloco.tipo === 'condutas' && (
-                      <div>
-                        <textarea
-                          value={bloco.conteudoTexto}
-                          onChange={(e) => atualizarBloco(bloco.id, 'conteudoTexto', e.target.value)}
-                          placeholder="Digite aqui orientações para a prescrição inteira ou selecione nas Condutas Padrão abaixo..."
-                          rows={4}
-                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none mb-4"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => atualizarBloco(bloco.id, 'expandido', !bloco.expandido)}
-                          className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg"
-                        >
-                          <span className="font-medium text-slate-900">Condutas Padrão (Salvas no Banco)</span>
-                          <ChevronDown className={`w-5 h-5 text-slate-600 transition-transform ${bloco.expandido ? 'rotate-180' : ''}`} />
-                        </button>
-                        {bloco.expandido && (
-                          <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                            <div className="space-y-4">
-                              {Object.entries(configsPorCategoria).map(([categoria, configs]) => (
-                                <div key={categoria}>
-                                  <h4 className="font-semibold text-slate-800 mb-2 text-sm">{categoria}</h4>
-                                  <div className="space-y-2 pl-2">
-                                    {configs.map((config) => (
-                                      <label key={config.id} className="flex items-start gap-3 cursor-pointer hover:bg-white p-2 rounded transition">
-                                        <input
-                                          type="checkbox"
-                                          checked={bloco.conteudoTexto?.includes(config.conteudo)}
-                                          onChange={(e) => toggleCondutaBloco(bloco.id, config.conteudo, e.target.checked)}
-                                          className="w-4 h-4 mt-1 text-emerald-600 border-slate-300 rounded"
-                                        />
-                                        <div className="flex-1">
-                                          <p className="text-sm font-medium text-slate-900">{config.titulo}</p>
-                                        </div>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
+                {/* --- TIPO: REFEIÇÃO (Com Calculadora Invisível) --- */}
+                {bloco.tipo === 'refeicao' && (
+                  <div className="flex flex-col gap-1.5">
+                    <input 
+                      type="text" 
+                      value={bloco.nome} 
+                      onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} 
+                      placeholder="Título da Refeição (Ex: Café da Manhã)" 
+                      className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 w-full bg-transparent"
+                    />
+                    
+                    <div className="flex items-center gap-1.5 text-[#0066cc] font-semibold text-[11pt]">
+                      <span>META para INSULINA:</span>
+                      <input 
+                        type="text" 
+                        value={bloco.metaCarboidratos} 
+                        onChange={(e) => atualizarBloco(bloco.id, 'metaCarboidratos', e.target.value)} 
+                        placeholder="Ex: até 30g de Carboidratos" 
+                        className="flex-1 outline-none border-b border-dashed border-transparent hover:border-[#0066cc] bg-transparent placeholder-[#80bfff]"
+                      />
+                    </div>
+
+                    {/* Ferramenta de Cálculo e Adição de Itens (invisível até interagir) */}
+                    <div className="mt-2 space-y-2">
+                      {(bloco.opcoes || []).map((opcao, idx) => (
+                        <div key={opcao.id} className="relative">
+                          {(bloco.opcoes || []).length > 1 && (
+                            <div className="flex items-center justify-between mb-1 mt-3">
+                              <span className="text-[11pt] font-bold text-[#b45309]">Opção {idx + 1}</span>
+                              <button type="button" onClick={() => removerOpcao(bloco.id, opcao.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          )}
 
-                    {bloco.tipo === 'texto_livre' && (
-                      <div className="space-y-4">
-                        <input 
-                          type="text" 
-                          value={bloco.titulo} 
-                          onChange={(e) => atualizarBloco(bloco.id, 'titulo', e.target.value)} 
-                          placeholder="Título da Sessão (Ex: Suplementação)" 
-                          className="w-full px-4 py-2 font-bold text-lg border-b-2 border-slate-200 focus:border-emerald-500 focus:outline-none placeholder-slate-300"
-                        />
-                        <textarea
-                          value={bloco.conteudoTexto}
-                          onChange={(e) => atualizarBloco(bloco.id, 'conteudoTexto', e.target.value)}
-                          placeholder="Digite o texto livre aqui..."
-                          rows={5}
-                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none"
-                        />
-                      </div>
-                    )}
+                          {opcao.itens.map((item) => {
+                            const qtdNum = parseQtd(item.quantidade);
+                            const calcM = (base?: number) => base ? ((base * qtdNum) / 100).toFixed(1) : '--';
 
-                    {bloco.tipo === 'refeicao' && (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
-                          <div className="flex-1">
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">Horário / Refeição</label>
-                            <input
-                              type="text"
-                              value={bloco.nome}
-                              onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)}
-                              placeholder="Ex: Café da Manhã e Lanche da Tarde"
-                              className="px-4 py-2 border border-slate-300 rounded-lg w-full focus:ring-2 focus:ring-emerald-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Meta Carboidratos (g)</label>
-                            <input
-                              type="number"
-                              value={bloco.metaCarboidratos}
-                              onChange={(e) => atualizarBloco(bloco.id, 'metaCarboidratos', e.target.value)}
-                              placeholder="Ex: 30"
-                              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Meta Proteínas (g)</label>
-                            <input
-                              type="number"
-                              value={bloco.metaProteinas}
-                              onChange={(e) => atualizarBloco(bloco.id, 'metaProteinas', e.target.value)}
-                              placeholder="Ex: 18"
-                              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-8">
-                          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Totais Calculados por Opção</h4>
-                          <div className="space-y-2">
-                            {(bloco.opcoes || []).map((opcao, idx) => {
-                              let tCho = 0, tPtn = 0, tLip = 0;
-                              opcao.itens.forEach((it) => {
-                                const qtdNum = parseQtd(it.quantidade);
-                                if (it.baseMacros) {
-                                  tCho += (it.baseMacros.cho * qtdNum) / 100;
-                                  tPtn += (it.baseMacros.ptn * qtdNum) / 100;
-                                  tLip += (it.baseMacros.lip * qtdNum) / 100;
-                                }
-                              });
-
-                              const estourouCho = bloco.metaCarboidratos && tCho > Number(bloco.metaCarboidratos);
-                              const estourouPtn = bloco.metaProteinas && tPtn > Number(bloco.metaProteinas);
-
-                              return (
-                                <div key={opcao.id} className="flex gap-4 text-sm bg-white p-2 border border-slate-100 rounded">
-                                  <span className="font-semibold text-slate-700 w-20">Opção {idx + 1}:</span>
-                                  <span className={`font-mono ${estourouCho ? 'text-red-600 font-bold' : 'text-slate-600'}`}>C: {tCho.toFixed(1)}g</span>
-                                  <span className={`font-mono ${estourouPtn ? 'text-red-600 font-bold' : 'text-slate-600'}`}>P: {tPtn.toFixed(1)}g</span>
-                                  <span className="font-mono text-slate-600">L: {tLip.toFixed(1)}g</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="space-y-6 mb-8">
-                          {(bloco.opcoes || []).map((opcao, idx) => (
-                            <div key={opcao.id}>
-                              {(bloco.opcoes || []).length > 1 && (
-                                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
-                                  <span className="text-sm font-bold text-slate-700 uppercase">Opção {idx + 1}</span>
-                                  <button type="button" onClick={() => removerOpcao(bloco.id, opcao.id)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                                </div>
-                              )}
-
-                              {opcao.itens.map((item) => {
-                                const qtdNum = parseQtd(item.quantidade);
-                                const calcM = (base?: number) => base ? ((base * qtdNum) / 100).toFixed(1) : '--';
-
-                                return (
-                                  <div key={item.id} className="flex flex-col gap-2 mb-4 bg-white border border-slate-100 p-2 rounded-lg shadow-sm">
-                                    <div className="flex items-center gap-2">
-                                      <div className="text-slate-300 cursor-move"><GripVertical className="w-5 h-5" /></div>
-                                      <BuscaAlimento 
-                                        valorInicial={item.nome}
-                                        onSelect={(nome, macros, dbId) => {
-                                          setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? {
-                                            ...b,
-                                            opcoes: b.opcoes!.map(o => o.id === opcao.id ? {
-                                              ...o,
-                                              itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId } : i)
-                                            } : o)
-                                          } : b));
-                                        }}
-                                      />
-                                      <input
-                                        type="text"
-                                        value={item.quantidade}
-                                        onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)}
-                                        placeholder="Qtd (Ex: 100g)"
-                                        className="w-28 px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 text-sm"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => setModalEdicao({
-                                          isOpen: true,
-                                          id: item.dbId || '',
-                                          nome: item.nome,
-                                          cho: String(item.baseMacros?.cho || 0),
-                                          ptn: String(item.baseMacros?.ptn || 0),
-                                          lip: String(item.baseMacros?.lip || 0),
-                                        })}
-                                        className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"
-                                        title="Refinar este alimento no banco de dados"
-                                      >
-                                        <Pencil className="w-4 h-4" />
-                                      </button>
-                                      <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                                    </div>
-
-                                    <div className="flex items-center pl-8 gap-2">
-                                      <div className="flex items-center gap-2">
-                                        <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'cho' ? null : 'cho')} className={`px-2 py-1 text-[11px] font-mono border rounded transition-colors ${item.macroAtivo === 'cho' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}>C: {calcM(item.baseMacros?.cho)}</button>
-                                        <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'ptn' ? null : 'ptn')} className={`px-2 py-1 text-[11px] font-mono border rounded transition-colors ${item.macroAtivo === 'ptn' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}>P: {calcM(item.baseMacros?.ptn)}</button>
-                                        <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'lip' ? null : 'lip')} className={`px-2 py-1 text-[11px] font-mono border rounded transition-colors ${item.macroAtivo === 'lip' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}>L: {calcM(item.baseMacros?.lip)}</button>
-                                      </div>
-                                      {item.macroAtivo && (
-                                        <div className="flex items-center gap-2 ml-2 bg-emerald-50 px-3 py-1 rounded-md border border-emerald-200">
-                                          <Target className="w-3 h-3 text-emerald-600" />
-                                          <span className="text-[11px] font-semibold text-emerald-800">Alvo {item.macroAtivo.toUpperCase()} (g):</span>
-                                          <input type="number" value={item.macroAlvo || ''} onChange={(e) => atualizarAlvoMacro(bloco.id, opcao.id, item.id, e.target.value)} placeholder="Ex: 15" className="w-16 px-2 py-0.5 text-[11px] font-mono border border-emerald-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500" />
-                                        </div>
-                                      )}
-                                    </div>
+                            return (
+                              <div key={item.id} className="flex flex-col gap-1 mb-1 bg-transparent hover:bg-slate-50 border-l-2 border-transparent hover:border-emerald-200 pl-2 py-1 group/item transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <div className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100 transition-opacity"><GripVertical className="w-4 h-4" /></div>
+                                  <span className="text-[11pt] font-semibold text-black">+</span>
+                                  <input
+                                    type="text"
+                                    value={item.quantidade}
+                                    onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)}
+                                    placeholder="100g"
+                                    className="w-16 px-1 py-0.5 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black"
+                                  />
+                                  <div className="flex-1">
+                                    <BuscaAlimento 
+                                      valorInicial={item.nome}
+                                      onSelect={(nome, macros, dbId) => {
+                                        setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId } : i) } : o) } : b));
+                                      }}
+                                    />
                                   </div>
-                                );
-                              })}
-                              <div className="mt-2">
-                                <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id)} className="text-emerald-600 font-medium text-sm flex items-center gap-1 hover:text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-md transition"><Plus className="w-4 h-4" /> Adicionar Alimento</button>
+                                  
+                                  <button type="button" onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.baseMacros?.cho || 0), ptn: String(item.baseMacros?.ptn || 0), lip: String(item.baseMacros?.lip || 0) })} className="p-1 text-slate-300 hover:text-emerald-600 opacity-0 group-hover/item:opacity-100 transition-opacity"><Pencil className="w-3.5 h-3.5" /></button>
+                                  <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </div>
+
+                                <div className="flex items-center pl-8 gap-2 opacity-30 focus-within:opacity-100 hover:opacity-100 transition-opacity">
+                                  <div className="flex items-center gap-1.5">
+                                    <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'cho' ? null : 'cho')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'cho' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>C: {calcM(item.baseMacros?.cho)}</button>
+                                    <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'ptn' ? null : 'ptn')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'ptn' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>P: {calcM(item.baseMacros?.ptn)}</button>
+                                    <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'lip' ? null : 'lip')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'lip' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>L: {calcM(item.baseMacros?.lip)}</button>
+                                  </div>
+                                  {item.macroAtivo && (
+                                    <div className="flex items-center gap-1 bg-[#0066cc]/5 px-2 py-0.5 rounded border border-[#0066cc]/20">
+                                      <Target className="w-3 h-3 text-[#0066cc]" />
+                                      <span className="text-[10px] font-semibold text-[#0066cc]">Alvo {item.macroAtivo.toUpperCase()} (g):</span>
+                                      <input type="number" value={item.macroAlvo || ''} onChange={(e) => atualizarAlvoMacro(bloco.id, opcao.id, item.id, e.target.value)} className="w-10 text-[10px] font-mono bg-transparent border-b border-dashed border-[#0066cc]/50 outline-none text-center" />
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                          <button type="button" onClick={() => adicionarOpcao(bloco.id)} className="w-full py-3 border-2 border-dashed border-slate-300 text-slate-500 rounded-lg hover:border-emerald-500 hover:text-emerald-600 font-medium transition flex items-center justify-center gap-2 mt-4"><Plus className="w-4 h-4" /> Adicionar Nova Opção</button>
+                            );
+                          })}
+                          <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id)} className="text-emerald-600/50 hover:text-emerald-600 font-medium text-[9pt] flex items-center gap-1 pl-3 mt-1 transition-colors"><Plus className="w-3.5 h-3.5" /> Adicionar linha de alimento</button>
                         </div>
+                      ))}
+                      <button type="button" onClick={() => adicionarOpcao(bloco.id)} className="text-slate-400 text-[10pt] font-medium hover:text-emerald-600 transition flex items-center gap-1 mt-3"><Plus className="w-3.5 h-3.5"/> Adicionar Opção (Substituição)</button>
+                    </div>
 
-                        <div className="mb-4">
-                          <label className="block text-sm font-semibold text-slate-700 mb-2">Observações</label>
-                          <textarea value={bloco.observacoes} onChange={(e) => atualizarBloco(bloco.id, 'observacoes', e.target.value)} placeholder="Orientações específicas ou opcionais apenas para esta refeição..." rows={2} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none" />
-                        </div>
+                    {/* Texto Livre Extra da Refeição */}
+                    <div className="mt-4">
+                      <textarea 
+                        value={bloco.conteudoTexto} 
+                        onChange={(e) => handleTextareaResize(e, bloco.id)} 
+                        placeholder="Texto ou observação livre para esta refeição (Aparecerá abaixo das sugestões)" 
+                        rows={1}
+                        className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* --- TIPO: TEXTO LIVRE --- */}
+                {bloco.tipo === 'texto_livre' && (
+                  <div className="flex flex-col gap-1.5">
+                    <input 
+                      type="text" 
+                      value={bloco.titulo} 
+                      onChange={(e) => atualizarBloco(bloco.id, 'titulo', e.target.value)} 
+                      placeholder="Subtítulo (Ex: Lanches da Tarde)" 
+                      className="text-[12pt] font-bold text-[#b45309] outline-none placeholder-slate-300 w-full bg-transparent"
+                    />
+                    <textarea 
+                      value={bloco.conteudoTexto} 
+                      onChange={(e) => handleTextareaResize(e, bloco.id)} 
+                      placeholder="Digite o conteúdo livre aqui..." 
+                      rows={3}
+                      className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed"
+                    />
+                  </div>
+                )}
+
+                {/* --- TIPO: CONDUTAS --- */}
+                {bloco.tipo === 'condutas' && (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[12pt] font-bold text-[#b45309]">Orientações / Condutas</p>
+                    <textarea 
+                      value={bloco.conteudoTexto} 
+                      onChange={(e) => handleTextareaResize(e, bloco.id)} 
+                      placeholder="Digite as condutas aqui ou selecione no menu de atalhos abaixo..." 
+                      rows={4}
+                      className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-slate-50 focus:bg-white border border-transparent focus:border-slate-200 p-2 rounded leading-relaxed"
+                    />
+                    
+                    <button type="button" onClick={() => atualizarBloco(bloco.id, 'expandido', !bloco.expandido)} className="mt-2 flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-600 font-medium">
+                      <span>Atalhos de Condutas do Banco</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${bloco.expandido ? 'rotate-180' : ''}`} />
+                    </button>
+                    {bloco.expandido && (
+                      <div className="mt-2 p-4 bg-slate-50 rounded border border-slate-200 text-sm">
+                        {Object.entries(configsPorCategoria).map(([categoria, configs]) => (
+                          <div key={categoria} className="mb-3 last:mb-0">
+                            <h4 className="font-bold text-slate-800 mb-1">{categoria}</h4>
+                            {configs.map((config) => (
+                              <label key={config.id} className="flex items-start gap-2 cursor-pointer hover:bg-white p-1 rounded">
+                                <input type="checkbox" checked={bloco.conteudoTexto.includes(config.conteudo)} onChange={(e) => toggleCondutaBloco(bloco.id, config.conteudo, e.target.checked)} className="mt-1" />
+                                <span className="text-slate-700">{config.titulo}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
                 )}
               </div>
             ))}
+          </div>
 
-            {/* BOTÕES PARA ADICIONAR BLOCOS NO MEIO DA PRESCRIÇÃO */}
-            <div className="flex flex-wrap items-center justify-center gap-4 py-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50">
-              <span className="text-sm font-semibold text-slate-500 w-full text-center">Adicionar novo bloco à prescrição:</span>
-              <button type="button" onClick={() => adicionarBloco('condutas')} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:border-emerald-500 hover:text-emerald-600 font-medium shadow-sm transition"><ListChecks className="w-4 h-4"/> Condutas Padrão</button>
-              <button type="button" onClick={() => adicionarBloco('texto_livre')} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:border-emerald-500 hover:text-emerald-600 font-medium shadow-sm transition"><Type className="w-4 h-4"/> Texto Livre</button>
-              <button type="button" onClick={() => adicionarBloco('refeicao')} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:border-emerald-500 hover:text-emerald-600 font-medium shadow-sm transition"><Utensils className="w-4 h-4"/> Refeição</button>
-            </div>
+          {/* BOTÕES PARA ADICIONAR BLOCOS */}
+          <div className="mt-10 pt-6 border-t border-dashed border-slate-300 flex flex-wrap gap-3">
+            <button type="button" onClick={() => adicionarBloco('refeicao')} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-medium transition text-sm"><Plus className="w-4 h-4"/> Adicionar Refeição</button>
+            <button type="button" onClick={() => adicionarBloco('texto_livre')} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-medium transition text-sm"><AlignLeft className="w-4 h-4"/> Parágrafo Livre</button>
+            <button type="button" onClick={() => adicionarBloco('condutas')} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-medium transition text-sm"><ListChecks className="w-4 h-4"/> Bloco de Condutas</button>
+          </div>
 
-            {/* TABELAS FIXAS NO RODAPÉ (Colapsável e Dinâmicas) */}
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-              <div 
-                className="bg-slate-50 px-8 py-5 border-b border-slate-200 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => setTabelasColapsadas(!tabelasColapsadas)}
-              >
-                <h2 className="text-xl font-bold text-slate-900">Tabelas de Equivalentes (Cálculo Automático)</h2>
-                <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${tabelasColapsadas ? 'rotate-180' : ''}`} />
+        </div>
+
+        {/* TABELAS DE EQUIVALENTES */}
+        <div className="max-w-4xl mx-auto bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-10">
+          <div 
+            className="bg-slate-50 px-8 py-5 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
+            onClick={() => setTabelasColapsadas(!tabelasColapsadas)}
+          >
+            <h2 className="text-lg font-bold text-slate-800">Anexar Tabelas de Equivalentes Automáticas no PDF</h2>
+            <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${tabelasColapsadas ? 'rotate-180' : ''}`} />
+          </div>
+
+          {!tabelasColapsadas && (
+            <div className="p-8 space-y-4 border-t border-slate-200">
+              
+              <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
+                  <label className="flex items-center gap-3 cursor-pointer flex-1">
+                    <input type="checkbox" checked={tabelasSelecionadas.proteinas} onChange={() => toggleTabela('proteinas')} className="w-5 h-5 text-emerald-600 rounded" />
+                    <span className="font-bold text-slate-800">Tabela 1: Proteínas Animais</span>
+                  </label>
+                  {tabelasSelecionadas.proteinas && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-amber-700">Alvo PTN (g):</span>
+                      <input type="number" value={alvosTabelas.proteinas} onChange={(e) => setAlvosTabelas({ ...alvosTabelas, proteinas: e.target.value })} placeholder="Ex: 20" className="w-20 px-2 py-1 border border-slate-300 rounded text-sm outline-none focus:border-emerald-500" />
+                    </div>
+                  )}
+                </div>
+                {tabelasSelecionadas.proteinas && (
+                  <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+                    {tabelaProteinas.map((item) => (
+                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border border-slate-200">
+                        <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => atualizarItemTabela('proteinas', item.id, nome, macros, dbId)} />
+                        <div className="w-24 text-sm font-bold text-slate-700 bg-slate-100 border border-slate-200 py-1.5 text-center rounded">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}</div>
+                        <button type="button" onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.macrosReal?.cho || 0), ptn: String(item.macrosReal?.ptn || 0), lip: String(item.macrosReal?.lip || 0) })} className="p-1.5 text-slate-400 hover:text-emerald-600"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => removerItemTabela('proteinas', item.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => adicionarItemTabela('proteinas')} className="text-emerald-600 text-sm font-semibold flex items-center gap-1 mt-2 hover:underline"><Plus className="w-4 h-4"/> Adicionar Linha</button>
+                  </div>
+                )}
               </div>
 
-              {!tabelasColapsadas && (
-                <div className="p-8 space-y-4">
-                  
-                  {/* Tabela 1: Proteínas */}
-                  <div className="bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
-                    <div className="p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
-                      <label className="flex items-center gap-3 cursor-pointer flex-1">
-                        <input type="checkbox" checked={tabelasSelecionadas.proteinas} onChange={() => toggleTabela('proteinas')} className="w-5 h-5 text-emerald-600 rounded" />
-                        <span className="font-medium text-slate-900">Tabela 1: Proteínas Animais</span>
-                      </label>
-                      {tabelasSelecionadas.proteinas && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-amber-700">Alvo PTN (g):</span>
-                          <input type="number" value={alvosTabelas.proteinas} onChange={(e) => setAlvosTabelas({ ...alvosTabelas, proteinas: e.target.value })} placeholder="Ex: 20" className="w-24 px-3 py-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500" />
-                        </div>
-                      )}
+              <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
+                  <label className="flex items-center gap-3 cursor-pointer flex-1">
+                    <input type="checkbox" checked={tabelasSelecionadas.substitutosArroz} onChange={() => toggleTabela('substitutosArroz')} className="w-5 h-5 text-emerald-600 rounded" />
+                    <span className="font-bold text-slate-800">Tabela 2: Substitutos de Arroz</span>
+                  </label>
+                  {tabelasSelecionadas.substitutosArroz && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-blue-700">Alvo CHO (g):</span>
+                      <input type="number" value={alvosTabelas.substitutosArroz} onChange={(e) => setAlvosTabelas({ ...alvosTabelas, substitutosArroz: e.target.value })} placeholder="Ex: 30" className="w-20 px-2 py-1 border border-slate-300 rounded text-sm outline-none focus:border-emerald-500" />
                     </div>
-                    {tabelasSelecionadas.proteinas && (
-                      <div className="p-4 bg-white border-t border-slate-100 space-y-3">
-                        {tabelaProteinas.map((item) => (
-                          <div key={item.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-100">
-                            <BuscaAlimento 
-                              valorInicial={item.nome} 
-                              onSelect={(nome, macros, dbId) => atualizarItemTabela('proteinas', item.id, nome, macros, dbId)} 
-                            />
-                            <div className="w-24 text-xs font-bold text-slate-600 bg-white border border-slate-200 py-2 text-center rounded">
-                              {calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.macrosReal?.cho || 0), ptn: String(item.macrosReal?.ptn || 0), lip: String(item.macrosReal?.lip || 0) })}
-                              className="p-2 text-slate-400 hover:text-emerald-600"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button type="button" onClick={() => removerItemTabela('proteinas', item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        ))}
-                        <button type="button" onClick={() => adicionarItemTabela('proteinas')} className="text-emerald-600 text-sm font-medium flex items-center gap-1 mt-2 hover:bg-emerald-50 px-3 py-2 rounded-md"><Plus className="w-4 h-4"/> Adicionar Alimento na Tabela</button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Tabela 2: Substitutos de Arroz */}
-                  <div className="bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
-                    <div className="p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
-                      <label className="flex items-center gap-3 cursor-pointer flex-1">
-                        <input type="checkbox" checked={tabelasSelecionadas.substitutosArroz} onChange={() => toggleTabela('substitutosArroz')} className="w-5 h-5 text-emerald-600 rounded" />
-                        <span className="font-medium text-slate-900">Tabela 2: Substitutos de Arroz</span>
-                      </label>
-                      {tabelasSelecionadas.substitutosArroz && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-blue-700">Alvo CHO (g):</span>
-                          <input type="number" value={alvosTabelas.substitutosArroz} onChange={(e) => setAlvosTabelas({ ...alvosTabelas, substitutosArroz: e.target.value })} placeholder="Ex: 30" className="w-24 px-3 py-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500" />
-                        </div>
-                      )}
-                    </div>
-                    {tabelasSelecionadas.substitutosArroz && (
-                      <div className="p-4 bg-white border-t border-slate-100 space-y-3">
-                        {tabelaArroz.map((item) => (
-                          <div key={item.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-100">
-                            <BuscaAlimento 
-                              valorInicial={item.nome} 
-                              onSelect={(nome, macros, dbId) => atualizarItemTabela('arroz', item.id, nome, macros, dbId)} 
-                            />
-                            <div className="w-24 text-xs font-bold text-slate-600 bg-white border border-slate-200 py-2 text-center rounded">
-                              {calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.macrosReal?.cho || 0), ptn: String(item.macrosReal?.ptn || 0), lip: String(item.macrosReal?.lip || 0) })}
-                              className="p-2 text-slate-400 hover:text-emerald-600"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button type="button" onClick={() => removerItemTabela('arroz', item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        ))}
-                        <button type="button" onClick={() => adicionarItemTabela('arroz')} className="text-emerald-600 text-sm font-medium flex items-center gap-1 mt-2 hover:bg-emerald-50 px-3 py-2 rounded-md"><Plus className="w-4 h-4"/> Adicionar Alimento na Tabela</button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Tabela 3: Frutas */}
-                  <div className="bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
-                    <div className="p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
-                      <label className="flex items-center gap-3 cursor-pointer flex-1">
-                        <input type="checkbox" checked={tabelasSelecionadas.frutas} onChange={() => toggleTabela('frutas')} className="w-5 h-5 text-emerald-600 rounded" />
-                        <span className="font-medium text-slate-900">Tabela 3: Frutas</span>
-                      </label>
-                      {tabelasSelecionadas.frutas && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-blue-700">Alvo CHO (g):</span>
-                          <input type="number" value={alvosTabelas.frutas} onChange={(e) => setAlvosTabelas({ ...alvosTabelas, frutas: e.target.value })} placeholder="Ex: 15" className="w-24 px-3 py-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500" />
-                        </div>
-                      )}
-                    </div>
-                    {tabelasSelecionadas.frutas && (
-                      <div className="p-4 bg-white border-t border-slate-100 space-y-3">
-                        {tabelaFrutas.map((item) => (
-                          <div key={item.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-100">
-                            <BuscaAlimento 
-                              valorInicial={item.nome} 
-                              onSelect={(nome, macros, dbId) => atualizarItemTabela('frutas', item.id, nome, macros, dbId)} 
-                            />
-                            <div className="w-24 text-xs font-bold text-slate-600 bg-white border border-slate-200 py-2 text-center rounded">
-                              {calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.macrosReal?.cho || 0), ptn: String(item.macrosReal?.ptn || 0), lip: String(item.macrosReal?.lip || 0) })}
-                              className="p-2 text-slate-400 hover:text-emerald-600"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button type="button" onClick={() => removerItemTabela('frutas', item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        ))}
-                        <button type="button" onClick={() => adicionarItemTabela('frutas')} className="text-emerald-600 text-sm font-medium flex items-center gap-1 mt-2 hover:bg-emerald-50 px-3 py-2 rounded-md"><Plus className="w-4 h-4"/> Adicionar Alimento na Tabela</button>
-                      </div>
-                    )}
-                  </div>
-
+                  )}
                 </div>
-              )}
-            </div>
+                {tabelasSelecionadas.substitutosArroz && (
+                  <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+                    {tabelaArroz.map((item) => (
+                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border border-slate-200">
+                        <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => atualizarItemTabela('arroz', item.id, nome, macros, dbId)} />
+                        <div className="w-24 text-sm font-bold text-slate-700 bg-slate-100 border border-slate-200 py-1.5 text-center rounded">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}</div>
+                        <button type="button" onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.macrosReal?.cho || 0), ptn: String(item.macrosReal?.ptn || 0), lip: String(item.macrosReal?.lip || 0) })} className="p-1.5 text-slate-400 hover:text-emerald-600"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => removerItemTabela('arroz', item.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => adicionarItemTabela('arroz')} className="text-emerald-600 text-sm font-semibold flex items-center gap-1 mt-2 hover:underline"><Plus className="w-4 h-4"/> Adicionar Linha</button>
+                  </div>
+                )}
+              </div>
 
-            <div className="flex gap-4 justify-end">
-              <Link
-                href="/"
-                className="px-6 py-3 border border-slate-300 rounded-lg text-slate-900 font-medium"
-              >
-                Cancelar
-              </Link>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:bg-slate-400"
-              >
-                {loading ? 'Salvando...' : 'Salvar Prescrição'}
-              </button>
+              <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
+                  <label className="flex items-center gap-3 cursor-pointer flex-1">
+                    <input type="checkbox" checked={tabelasSelecionadas.frutas} onChange={() => toggleTabela('frutas')} className="w-5 h-5 text-emerald-600 rounded" />
+                    <span className="font-bold text-slate-800">Tabela 3: Frutas</span>
+                  </label>
+                  {tabelasSelecionadas.frutas && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-blue-700">Alvo CHO (g):</span>
+                      <input type="number" value={alvosTabelas.frutas} onChange={(e) => setAlvosTabelas({ ...alvosTabelas, frutas: e.target.value })} placeholder="Ex: 15" className="w-20 px-2 py-1 border border-slate-300 rounded text-sm outline-none focus:border-emerald-500" />
+                    </div>
+                  )}
+                </div>
+                {tabelasSelecionadas.frutas && (
+                  <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+                    {tabelaFrutas.map((item) => (
+                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border border-slate-200">
+                        <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => atualizarItemTabela('frutas', item.id, nome, macros, dbId)} />
+                        <div className="w-24 text-sm font-bold text-slate-700 bg-slate-100 border border-slate-200 py-1.5 text-center rounded">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}</div>
+                        <button type="button" onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.macrosReal?.cho || 0), ptn: String(item.macrosReal?.ptn || 0), lip: String(item.macrosReal?.lip || 0) })} className="p-1.5 text-slate-400 hover:text-emerald-600"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => removerItemTabela('frutas', item.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => adicionarItemTabela('frutas')} className="text-emerald-600 text-sm font-semibold flex items-center gap-1 mt-2 hover:underline"><Plus className="w-4 h-4"/> Adicionar Linha</button>
+                  </div>
+                )}
+              </div>
+
             </div>
-          </form>
+          )}
         </div>
       </div>
 
-      <div id="print-area" className="hidden print:block bg-white text-black font-serif max-w-[210mm] mx-auto p-12 text-[11pt]">
+      {/* =========================================================
+          ÁREA DE IMPRESSÃO (PDF LAYOUT)
+          ========================================================= */}
+      <div id="print-area" className="hidden print:block bg-white text-black font-sans max-w-[210mm] mx-auto p-12 text-[11pt]">
 
-        <div className="border-b-2 border-[#1e3a8a] pb-2 mb-4 flex justify-between items-end">
-          <div className="font-sans">
-            <h1 className="text-3xl text-[#1e3a8a] mb-1 font-normal tracking-wide">
-              Prescrição Dietética
-            </h1>
-            <h2 className="text-lg text-[#1e3a8a]">
-              Paciente: {metadados.pacienteNome || 'Nome não preenchido'}
-            </h2>
-          </div>
+        <div className="mb-6">
+          <p className="text-[14pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</p>
+          <p className="text-[14pt] text-[#1e3a8a] mt-1">Paciente: <span className="font-bold">{metadados.pacienteNome || '___________________'}</span></p>
+          
+          <hr className="border-t border-dashed border-black my-4" />
+          
+          <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
+          <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
+          <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
+          
+          <p className="text-[12pt] font-bold underline mt-6 mb-2">Distribuição dos carboidratos por refeição:</p>
         </div>
 
-        <div className="text-right text-[9pt] text-[#1e3a8a] flex flex-col items-end mb-8 font-sans leading-snug">
-          <p className="text-black font-bold mb-1">Data: {metadados.dataPrescricao}</p>
-          <p className="font-bold">Nutricionista: Carolina Macedo CRN 29096</p>
-          <p className="underline text-blue-700">carolinamacedo.nutri@gmail.com</p>
-          <p className="underline text-blue-700">www.carolinaminhanutri.com</p>
-          <p className="font-bold">(19) 98314-1909</p>
-        </div>
-
-        <p className="text-justify mb-10 leading-relaxed font-sans">
-          <span className="font-bold text-[#1e3a8a]">Prescrição Dietética:</span>{' '}
-          {(() => {
-            const valor = metadados.faseCaloricas || '';
-            if (!valor) return null;
-            const jaTemKcal = valor.toLowerCase().includes('kcal');
-            return jaTemKcal ? valor : `${valor} kcal`;
-          })()}
-        </p>
-
-        {/* IMPRESSÃO DINÂMICA DOS BLOCOS */}
-        <div className="space-y-10 font-sans">
+        <div className="space-y-6">
           {blocos.map((bloco) => {
             if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
               return (
-                <div key={bloco.id} className="mb-10 font-sans break-inside-avoid">
-                  <h3 className="text-[14pt] font-bold text-[#1e3a8a] mb-2">Orientações Gerais</h3>
-                  <p className="whitespace-pre-line text-[11pt] text-gray-800 leading-relaxed text-justify">
-                    {bloco.conteudoTexto}
-                  </p>
+                <div key={bloco.id} className="break-inside-avoid">
+                  <p className="font-bold text-[12pt] text-[#b45309] mb-1">Orientações Gerais</p>
+                  <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
                 </div>
               );
             }
 
-            if (bloco.tipo === 'texto_livre' && bloco.conteudoTexto?.trim()) {
+            if (bloco.tipo === 'texto_livre' && (bloco.titulo || bloco.conteudoTexto?.trim())) {
               return (
-                <div key={bloco.id} className="mb-10 font-sans break-inside-avoid">
-                  {bloco.titulo && <h3 className="text-[14pt] font-bold text-[#1e3a8a] mb-2">{bloco.titulo}</h3>}
-                  <p className="whitespace-pre-line text-[11pt] text-gray-800 leading-relaxed text-justify">
-                    {bloco.conteudoTexto}
-                  </p>
+                <div key={bloco.id} className="break-inside-avoid">
+                  {bloco.titulo && <p className="font-bold text-[12pt] text-[#b45309] mb-1">{bloco.titulo}</p>}
+                  <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
                 </div>
               );
             }
 
             if (bloco.tipo === 'refeicao') {
-              const temConteudo = (bloco.opcoes || []).some((op) =>
-                op.itens.some((it) => it.nome || it.quantidade)
-              );
-              if (!temConteudo) return null;
+              const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade));
+              if (!temOpcoes && !bloco.conteudoTexto?.trim()) return null;
 
               return (
-                <div key={bloco.id} className="break-inside-avoid">
-                  <div className="mb-4">
-                    <h3 className="text-[14pt] font-bold text-[#1e3a8a] mb-1">{bloco.nome}</h3>
-                    {(bloco.metaCarboidratos || bloco.metaProteinas) && (
-                      <p className="text-xs font-bold uppercase tracking-wide">
-                        <span className="text-[#1e3a8a]">META INSULINA: </span>
-                        {bloco.metaCarboidratos && (
-                          <span className="text-[#1e3a8a]">
-                            até {bloco.metaCarboidratos}g de Carboidratos{' '}
-                          </span>
-                        )}
-                        {bloco.metaCarboidratos && bloco.metaProteinas && (
-                          <span className="text-black mx-1">|</span>
-                        )}
-                        {bloco.metaProteinas && (
-                          <span className="text-[#b45309]">Proteína: {bloco.metaProteinas}g</span>
-                        )}
-                      </p>
-                    )}
-                  </div>
-
+                <div key={bloco.id} className="break-inside-avoid mb-6">
+                  {bloco.nome && <p className="font-bold text-[12pt] text-black">{bloco.nome}</p>}
+                  
+                  {bloco.metaCarboidratos && (
+                    <p className="text-[11pt] font-semibold text-[#0066cc]">META para INSULINA: {bloco.metaCarboidratos}</p>
+                  )}
+                  
                   {(bloco.opcoes || []).map((opcao, idx) => {
                     const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade);
                     if (!temItemPreenchido) return null;
 
                     return (
-                      <div key={opcao.id} className="mb-6 pl-2">
-                        {bloco.opcoes!.length > 1 && (
-                          <p className="font-bold text-[#b45309] mb-3 text-sm">Opção {idx + 1}:</p>
+                      <div key={opcao.id} className="mt-2">
+                        {bloco.opcoes!.length > 1 ? (
+                          <p className="font-bold text-[#b45309] text-[11pt] mb-1">Opção {idx + 1}:</p>
+                        ) : (
+                          <p className="font-bold text-black text-[11pt] mb-1">Sugestão:</p>
                         )}
-                        <ul className="list-disc pl-5 space-y-1.5 text-[11pt]">
+                        <div className="text-[11pt] text-black leading-relaxed">
                           {opcao.itens.map((item) => {
                             if (!item.nome && !item.quantidade) return null;
                             return (
-                              <li key={item.id} className="pl-1">
-                                {item.quantidade && (
-                                  <span className="font-bold">{item.quantidade} </span>
-                                )}{' '}
-                                {item.nome}
-                              </li>
+                              <div key={item.id}>
+                                + {item.quantidade && <span className="font-semibold">{item.quantidade} </span>} {item.nome}
+                              </div>
                             );
                           })}
-                        </ul>
+                        </div>
                       </div>
                     );
                   })}
 
-                  {bloco.observacoes && (
-                    <p className="italic text-[10pt] mt-3 whitespace-pre-line pl-6 text-gray-800">
-                      Obs: {bloco.observacoes}
-                    </p>
+                  {bloco.conteudoTexto?.trim() && (
+                    <div className="mt-2 text-[11pt] whitespace-pre-line text-black leading-relaxed">
+                      {bloco.conteudoTexto}
+                    </div>
                   )}
                 </div>
               );
@@ -1311,238 +919,110 @@ export default function CriarPrescricao() {
           })}
         </div>
 
+        {/* TABELAS DE EQUIVALENTES PDF */}
         {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.frutas) && (
-          <div className="mt-14 break-before-auto font-sans">
-
+          <div className="mt-10 break-before-auto">
             {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
-              <div className="mb-10 break-inside-avoid">
-                <h3 className="font-bold text-[#1e3a8a] text-[12pt] mb-2">
-                  Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Peso Pronto)
-                </h3>
+              <div className="mb-8 break-inside-avoid">
+                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
                 <table className="w-full border-collapse border border-black text-[10.5pt]">
                   <thead>
-                    <tr>
-                      <th className="border border-black text-left px-3 py-1.5 font-bold">Opção de Proteína</th>
-                      <th className="border border-black text-left px-3 py-1.5 font-bold w-1/3">Quantidade / Peso</th>
-                    </tr>
+                    <tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade / Peso</th></tr>
                   </thead>
                   <tbody>
-                    {tabelaProteinas.map((item, idx) => {
-                      if (!item.nome) return null;
-                      return (
-                        <tr key={idx}>
-                          <td className="border border-black px-3 py-1.5">{item.nome}</td>
-                          <td className="border border-black px-3 py-1.5">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}</td>
-                        </tr>
-                      )
-                    })}
-                    <tr>
-                      <td className="border border-black px-3 py-1.5">Ovos</td>
-                      <td className="border border-black px-3 py-1.5 italic">Ajustar (1 ovo = ~6g ptn)</td>
-                    </tr>
+                    {tabelaProteinas.map((item, idx) => item.nome ? (
+                      <tr key={idx}>
+                        <td className="border border-black px-3 py-1">{item.nome}</td>
+                        <td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}</td>
+                      </tr>
+                    ) : null)}
+                    <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 italic">Ajustar (1 ovo = ~6g ptn)</td></tr>
                   </tbody>
                 </table>
               </div>
             )}
 
             {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
-              <div className="mb-10 break-inside-avoid">
-                <h3 className="font-bold text-[#1e3a8a] text-[12pt] mb-2">
-                  Tabela 2: Substitutos de Arroz (porção do almoço aprox. {alvosTabelas.substitutosArroz}g Carboidratos)
-                </h3>
+              <div className="mb-8 break-inside-avoid">
+                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
                 <table className="w-full border-collapse border border-black text-[10.5pt]">
                   <thead>
-                    <tr>
-                      <th className="border border-black text-left px-3 py-1.5 font-bold">Alimento</th>
-                      <th className="border border-black text-left px-3 py-1.5 font-bold w-1/3">Quantidade Equivalente</th>
-                    </tr>
+                    <tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade Equivalente</th></tr>
                   </thead>
                   <tbody>
-                    {tabelaArroz.map((item, idx) => {
-                      if (!item.nome) return null;
-                      return (
-                        <tr key={idx}>
-                          <td className="border border-black px-3 py-1.5">{item.nome}</td>
-                          <td className="border border-black px-3 py-1.5">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}</td>
-                        </tr>
-                      )
-                    })}
+                    {tabelaArroz.map((item, idx) => item.nome ? (
+                      <tr key={idx}>
+                        <td className="border border-black px-3 py-1">{item.nome}</td>
+                        <td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}</td>
+                      </tr>
+                    ) : null)}
                   </tbody>
                 </table>
-                <p className="text-[10pt] mt-2 font-bold text-gray-800">
-                  Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)
-                </p>
+                <p className="text-[10pt] mt-1 font-bold text-gray-800">Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)</p>
               </div>
             )}
 
             {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
-              <div className="mb-10 break-inside-avoid">
-                <h3 className="font-bold text-[#1e3a8a] text-[12pt] mb-2">
-                  Tabela 3: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)
-                </h3>
+              <div className="mb-8 break-inside-avoid">
+                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
                 <table className="w-full border-collapse border border-black text-[10.5pt]">
                   <thead>
-                    <tr>
-                      <th className="border border-black text-left px-3 py-1.5 font-bold">Fruta</th>
-                      <th className="border border-black text-left px-3 py-1.5 font-bold w-1/3">Peso / Quantidade</th>
-                    </tr>
+                    <tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Peso / Quantidade</th></tr>
                   </thead>
                   <tbody>
-                    {tabelaFrutas.map((item, idx) => {
-                      if (!item.nome) return null;
-                      return (
-                        <tr key={idx}>
-                          <td className="border border-black px-3 py-1.5">{item.nome}</td>
-                          <td className="border border-black px-3 py-1.5">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}</td>
-                        </tr>
-                      )
-                    })}
+                    {tabelaFrutas.map((item, idx) => item.nome ? (
+                      <tr key={idx}>
+                        <td className="border border-black px-3 py-1">{item.nome}</td>
+                        <td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}</td>
+                      </tr>
+                    ) : null)}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
         )}
-
       </div>
 
+      {/* MODAIS (Assinatura e Edição) */}
       {isSignModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <FileSignature className="w-5 h-5 text-blue-600" /> Assinatura Digital
-              </h3>
-              <button onClick={() => !isSigning && setIsSignModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="text-lg font-bold flex items-center gap-2"><FileSignature className="w-5 h-5 text-blue-600" /> Assinatura</h3>
+              <button onClick={() => !isSigning && setIsSignModalOpen(false)}><X className="w-5 h-5" /></button>
             </div>
-            
             <div className="p-6 space-y-5">
-              {signError && (
-                <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
-                  {signError}
-                </div>
-              )}
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">1. Certificado A1 (.pfx)</label>
-                <input 
-                  type="file" 
-                  accept=".pfx,.p12"
-                  onChange={(e) => setCertFile(e.target.files ? e.target.files[0] : null)}
-                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  disabled={isSigning}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">2. Senha do Certificado</label>
-                <input 
-                  type="password"
-                  value={certPassword}
-                  onChange={(e) => setCertPassword(e.target.value)}
-                  placeholder="Digite a senha..."
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isSigning}
-                />
-              </div>
+              {signError && <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border">{signError}</div>}
+              <div><label className="block text-sm font-semibold mb-2">1. Certificado (.pfx)</label><input type="file" accept=".pfx,.p12" onChange={(e) => setCertFile(e.target.files ? e.target.files[0] : null)} disabled={isSigning} className="w-full text-sm" /></div>
+              <div><label className="block text-sm font-semibold mb-2">2. Senha</label><input type="password" value={certPassword} onChange={(e) => setCertPassword(e.target.value)} disabled={isSigning} className="w-full px-4 py-2 border rounded-lg" /></div>
             </div>
-
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-              <button 
-                onClick={() => setIsSignModalOpen(false)}
-                disabled={isSigning}
-                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleAssinar}
-                disabled={isSigning}
-                className="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:bg-blue-400"
-              >
-                {isSigning ? <><Loader2 className="w-4 h-4 animate-spin" /> Assinando...</> : 'Assinar Documento'}
-              </button>
+            <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3">
+              <button onClick={() => setIsSignModalOpen(false)} disabled={isSigning} className="px-4 py-2 font-medium">Cancelar</button>
+              <button onClick={handleAssinar} disabled={isSigning} className="px-6 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">{isSigning ? <><Loader2 className="w-4 h-4 animate-spin" /> Assinando...</> : 'Assinar'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ========================================================
-          NOVO MODAL: EDIÇÃO DE ALIMENTO NO BANCO
-          ======================================================== */}
       {modalEdicao.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-slate-800">Refinar Alimento</h3>
-              <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="text-lg font-bold">Refinar Alimento</h3>
+              <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })}><X className="w-5 h-5"/></button>
             </div>
-            
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome de Exibição</label>
-                <input 
-                  type="text" 
-                  value={modalEdicao.nome}
-                  onChange={(e) => setModalEdicao({...modalEdicao, nome: e.target.value})}
-                  className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
+              <div><label className="block text-sm font-semibold mb-1">Nome</label><input type="text" value={modalEdicao.nome} onChange={e => setModalEdicao({...modalEdicao, nome: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
               <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">CHO (g)</label>
-                  <input 
-                    type="number" 
-                    value={modalEdicao.cho}
-                    onChange={(e) => setModalEdicao({...modalEdicao, cho: e.target.value})}
-                    className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">PTN (g)</label>
-                  <input 
-                    type="number" 
-                    value={modalEdicao.ptn}
-                    onChange={(e) => setModalEdicao({...modalEdicao, ptn: e.target.value})}
-                    className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">LIP (g)</label>
-                  <input 
-                    type="number" 
-                    value={modalEdicao.lip}
-                    onChange={(e) => setModalEdicao({...modalEdicao, lip: e.target.value})}
-                    className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex justify-between items-center mt-2">
-                <span className="text-sm font-medium text-slate-600">Calorias (Automático)</span>
-                <span className="font-bold text-emerald-600">{caloriasCalculadas.toFixed(1)} kcal</span>
+                <div><label className="block text-xs font-semibold mb-1">CHO</label><input type="number" value={modalEdicao.cho} onChange={e => setModalEdicao({...modalEdicao, cho: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
+                <div><label className="block text-xs font-semibold mb-1">PTN</label><input type="number" value={modalEdicao.ptn} onChange={e => setModalEdicao({...modalEdicao, ptn: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
+                <div><label className="block text-xs font-semibold mb-1">LIP</label><input type="number" value={modalEdicao.lip} onChange={e => setModalEdicao({...modalEdicao, lip: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
               </div>
             </div>
-
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-              <button 
-                onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })}
-                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleAtualizarAlimento}
-                disabled={salvandoAlimento || !modalEdicao.nome.trim()}
-                className="px-6 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition disabled:bg-slate-400"
-              >
-                {salvandoAlimento ? 'Salvando...' : 'Salvar Alteração'}
-              </button>
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3">
+              <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })} className="px-4 py-2 font-medium">Cancelar</button>
+              <button onClick={handleAtualizarAlimento} disabled={salvandoAlimento || !modalEdicao.nome.trim()} className="px-6 py-2 bg-emerald-600 text-white rounded-lg">{salvandoAlimento ? 'Salvando...' : 'Salvar'}</button>
             </div>
           </div>
         </div>
