@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
-import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe } from 'lucide-react';
 import BuscaAlimento from '@/components/BuscaAlimento';
 
 import html2canvas from 'html2canvas';
@@ -19,6 +19,7 @@ interface ItemAlimento {
   baseMacros?: { cho: number; ptn: number; lip: number };
   macroAtivo?: 'cho' | 'ptn' | 'lip' | null;
   macroAlvo?: string;
+  conexao?: 'nova_linha' | 'mais' | 'ou'; 
 }
 
 interface Opcao {
@@ -33,10 +34,12 @@ interface Bloco {
   tipo: TipoBloco;
   nome?: string;
   metaCarboidratos?: string;
-  opcoes?: Opcao[]; // <-- De volta ao bloco!
+  mostrarMeta?: boolean; 
+  opcoes?: Opcao[];
   titulo?: string;
   conteudoTexto: string; 
   expandido?: boolean;
+  colapsado?: boolean;
 }
 
 interface ItemTabela {
@@ -62,63 +65,26 @@ const parseQtd = (str: string) => {
 
 // Bases fixas iniciais
 const TABELA_PROTEINAS = [
-  { nome: 'Frango (Peito, cozido)', base: 31.5 },
-  { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 },
-  { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 },
-  { nome: 'Lombo suíno (assado)', base: 35.7 }
+  { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 },
+  { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 }
 ];
-
 const TABELA_ARROZ = [
-  { nome: 'Batata Doce (cozida)', base: 18.4 },
-  { nome: 'Batata Inglesa / Purê', base: 11.9 },
-  { nome: 'Cará (cozido)', base: 18.9 },
-  { nome: 'Inhame (cozido)', base: 23.5 },
-  { nome: 'Mandioca (cozida)', base: 30.1 },
-  { nome: 'Mandioquinha (cozida)', base: 18.9 },
+  { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 },
+  { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 },
+  { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 },
   { nome: 'Milho-verde (enlatado)', base: 17.1 }
 ];
-
 const TABELA_FRUTAS = [
-  { nome: 'Abacate', base: 6.0 },
-  { nome: 'Abacaxi', base: 12.3 },
-  { nome: 'Ameixa Fresca', base: 11.4 },
-  { nome: 'Amora', base: 9.6 },
-  { nome: 'Atemoia', base: 25.3 },
-  { nome: 'Banana Maçã', base: 26.0 },
-  { nome: 'Banana Nanica', base: 23.8 },
-  { nome: 'Banana Prata', base: 26.0 },
-  { nome: 'Caju', base: 10.7 },
-  { nome: 'Caqui', base: 19.3 },
-  { nome: 'Carambola', base: 6.7 },
-  { nome: 'Cereja Fresca', base: 16.0 },
-  { nome: 'Coco Fresco', base: 15.2 },
-  { nome: 'Figo Fresco', base: 19.2 },
-  { nome: 'Framboesa', base: 11.9 },
-  { nome: 'Goiaba Branca', base: 12.4 },
-  { nome: 'Goiaba Vermelha', base: 13.0 },
-  { nome: 'Graviola', base: 16.8 },
-  { nome: 'Jabuticaba', base: 15.3 },
-  { nome: 'Jaca', base: 22.5 },
-  { nome: 'Kiwi', base: 14.7 },
-  { nome: 'Laranja Lima', base: 11.5 },
-  { nome: 'Laranja Pêra', base: 8.9 },
-  { nome: 'Limão', base: 9.3 },
-  { nome: 'Maçã Fuji', base: 15.2 },
-  { nome: 'Maçã Gala', base: 13.8 },
-  { nome: 'Maçã Verde', base: 13.6 },
-  { nome: 'Maracujá', base: 23.4 },
-  { nome: 'Melancia', base: 6.8 },
-  { nome: 'Melão', base: 7.5 },
-  { nome: 'Mirtilo (Blueberry)', base: 14.5 },
-  { nome: 'Morango', base: 6.8 },
-  { nome: 'Nectarina', base: 10.5 },
-  { nome: 'Pera', base: 15.2 },
-  { nome: 'Pêssego Fresco', base: 9.5 },
-  { nome: 'Pitaia (Pitaya)', base: 11.8 },
-  { nome: 'Romã', base: 18.7 },
-  { nome: 'Tangerina / Mexerica', base: 13.3 },
-  { nome: 'Uva Rubi', base: 17.3 },
-  { nome: 'Uva Thompson', base: 18.1 }
+  { nome: 'Abacate', base: 6.0 }, { nome: 'Abacaxi', base: 12.3 }, { nome: 'Ameixa Fresca', base: 11.4 }, { nome: 'Amora', base: 9.6 },
+  { nome: 'Atemoia', base: 25.3 }, { nome: 'Banana Maçã', base: 26.0 }, { nome: 'Banana Nanica', base: 23.8 }, { nome: 'Banana Prata', base: 26.0 },
+  { nome: 'Caju', base: 10.7 }, { nome: 'Caqui', base: 19.3 }, { nome: 'Carambola', base: 6.7 }, { nome: 'Cereja Fresca', base: 16.0 },
+  { nome: 'Coco Fresco', base: 15.2 }, { nome: 'Figo Fresco', base: 19.2 }, { nome: 'Framboesa', base: 11.9 }, { nome: 'Goiaba Branca', base: 12.4 },
+  { nome: 'Goiaba Vermelha', base: 13.0 }, { nome: 'Graviola', base: 16.8 }, { nome: 'Jabuticaba', base: 15.3 }, { nome: 'Jaca', base: 22.5 },
+  { nome: 'Kiwi', base: 14.7 }, { nome: 'Laranja Lima', base: 11.5 }, { nome: 'Laranja Pêra', base: 8.9 }, { nome: 'Limão', base: 9.3 },
+  { nome: 'Maçã Fuji', base: 15.2 }, { nome: 'Maçã Gala', base: 13.8 }, { nome: 'Maçã Verde', base: 13.6 }, { nome: 'Maracujá', base: 23.4 },
+  { nome: 'Melancia', base: 6.8 }, { nome: 'Melão', base: 7.5 }, { nome: 'Mirtilo (Blueberry)', base: 14.5 }, { nome: 'Morango', base: 6.8 },
+  { nome: 'Nectarina', base: 10.5 }, { nome: 'Pera', base: 15.2 }, { nome: 'Pêssego Fresco', base: 9.5 }, { nome: 'Pitaia (Pitaya)', base: 11.8 },
+  { nome: 'Romã', base: 18.7 }, { nome: 'Tangerina / Mexerica', base: 13.3 }, { nome: 'Uva Rubi', base: 17.3 }, { nome: 'Uva Thompson', base: 18.1 }
 ];
 
 export default function CriarPrescricao() {
@@ -126,42 +92,20 @@ export default function CriarPrescricao() {
   const { preConfigs } = usePreConfiguracoes();
 
   const dataAtual = new Date().toLocaleDateString('pt-BR');
-  const [metadados, setMetadados] = useState<MetadadosPrescricion>({
-    pacienteId: '',
-    pacienteNome: '',
-    faseCaloricas: '',
-    dataPrescricao: dataAtual,
-  });
-
+  const [metadados, setMetadados] = useState<MetadadosPrescricion>({ pacienteId: '', pacienteNome: '', faseCaloricas: '', dataPrescricao: dataAtual });
   const [tabelasColapsadas, setTabelasColapsadas] = useState(true);
 
-  // Blocos iniciais
-  const [blocos, setBlocos] = useState<Bloco[]>([
-    {
-      id: `ref-${Date.now()}`,
-      tipo: 'refeicao',
-      nome: 'Café da Manhã',
-      metaCarboidratos: 'até 30g de Carboidratos',
-      conteudoTexto: '',
-      opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }]
-    },
-  ]);
+  const [blocos, setBlocos] = useState<Bloco[]>([{
+    id: `ref-${Date.now()}`, tipo: 'refeicao', nome: 'Café da Manhã', metaCarboidratos: 'até 30g de Carboidratos', mostrarMeta: true, colapsado: false,
+    conteudoTexto: '', opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha' }] }]
+  }]);
 
-  const [tabelasSelecionadas, setTabelasSelecionadas] = useState({
-    proteinas: false, substitutosArroz: false, frutas: false,
-  });
-
+  const [tabelasSelecionadas, setTabelasSelecionadas] = useState({ proteinas: false, substitutosArroz: false, frutas: false });
   const [alvosTabelas, setAlvosTabelas] = useState({ proteinas: '', substitutosArroz: '', frutas: '' });
 
-  const [tabelaProteinas, setTabelaProteinas] = useState<ItemTabela[]>(
-    TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 } }))
-  );
-  const [tabelaArroz, setTabelaArroz] = useState<ItemTabela[]>(
-    TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 } }))
-  );
-  const [tabelaFrutas, setTabelaFrutas] = useState<ItemTabela[]>(
-    TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 } }))
-  );
+  const [tabelaProteinas, setTabelaProteinas] = useState<ItemTabela[]>(TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 } })));
+  const [tabelaArroz, setTabelaArroz] = useState<ItemTabela[]>(TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 } })));
+  const [tabelaFrutas, setTabelaFrutas] = useState<ItemTabela[]>(TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 } })));
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -177,151 +121,115 @@ export default function CriarPrescricao() {
   const [isSigning, setIsSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
 
-  const configsPorCategoria = preConfigs.reduce(
-    (acc, config: PreConfiguracao) => {
-      if (!acc[config.categoria]) acc[config.categoria] = [];
-      acc[config.categoria].push(config);
-      return acc;
-    },
-    {} as Record<string, PreConfiguracao[]>
-  );
+  const configsPorCategoria = preConfigs.reduce((acc, config: PreConfiguracao) => {
+    if (!acc[config.categoria]) acc[config.categoria] = [];
+    acc[config.categoria].push(config);
+    return acc;
+  }, {} as Record<string, PreConfiguracao[]>);
 
   const handlePacienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const pacienteId = e.target.value;
-    const paciente = pacientes.find((p) => p.id === pacienteId);
-    setMetadados({ ...metadados, pacienteId, pacienteNome: paciente?.nome_completo || '' });
+    const paciente = pacientes.find((p) => p.id === e.target.value);
+    setMetadados({ ...metadados, pacienteId: e.target.value, pacienteNome: paciente?.nome_completo || '' });
   };
-
   const handleDataChange = (e: React.ChangeEvent<HTMLInputElement>) => setMetadados({ ...metadados, dataPrescricao: e.target.value });
 
   // --- Handlers de Blocos ---
   const adicionarBloco = (tipo: TipoBloco) => {
-    const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, conteudoTexto: '' };
+    const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, conteudoTexto: '', mostrarMeta: true, colapsado: false };
     if (tipo === 'refeicao') {
-      novoBloco.nome = '';
-      novoBloco.metaCarboidratos = '';
-      novoBloco.opcoes = [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }];
-    } else if (tipo === 'texto_livre') {
-      novoBloco.titulo = 'Título da Sessão';
-    } else if (tipo === 'condutas') {
-      novoBloco.expandido = false;
-    }
+      novoBloco.nome = ''; novoBloco.metaCarboidratos = 'até 30g de Carboidratos';
+      novoBloco.opcoes = [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha' }] }];
+    } else if (tipo === 'texto_livre') novoBloco.titulo = 'Título da Sessão';
+    else if (tipo === 'condutas') novoBloco.expandido = false;
     setBlocos([...blocos, novoBloco]);
   };
-
   const removerBloco = (id: string) => setBlocos(blocos.filter(b => b.id !== id));
-
   const moverBloco = (index: number, direcao: 'cima' | 'baixo') => {
-    if (direcao === 'cima' && index === 0) return;
-    if (direcao === 'baixo' && index === blocos.length - 1) return;
+    if ((direcao === 'cima' && index === 0) || (direcao === 'baixo' && index === blocos.length - 1)) return;
     const novosBlocos = [...blocos];
     const alvo = direcao === 'cima' ? index - 1 : index + 1;
     [novosBlocos[index], novosBlocos[alvo]] = [novosBlocos[alvo], novosBlocos[index]];
     setBlocos(novosBlocos);
   };
-
   const atualizarBloco = (id: string, campo: keyof Bloco, valor: any) => setBlocos(blocos.map(b => (b.id === id ? { ...b, [campo]: valor } : b)));
-
+  
   const toggleCondutaBloco = (blocoId: string, conteudo: string, checked: boolean) => {
     setBlocos(blocos.map(b => {
       if (b.id === blocoId && b.tipo === 'condutas') {
-        let novoTexto = b.conteudoTexto || '';
-        if (checked) {
-          if (!novoTexto.includes(conteudo)) novoTexto = novoTexto ? `${novoTexto}\n\n${conteudo}` : conteudo;
-        } else {
-          novoTexto = novoTexto.replace(`\n\n${conteudo}`, '').replace(`${conteudo}\n\n`, '').replace(conteudo, '');
-        }
-        return { ...b, conteudoTexto: novoTexto.trim() };
+        let novo = b.conteudoTexto || '';
+        if (checked) novo = !novo.includes(conteudo) ? (novo ? `${novo}\n\n${conteudo}` : conteudo) : novo;
+        else novo = novo.replace(`\n\n${conteudo}`, '').replace(`${conteudo}\n\n`, '').replace(conteudo, '');
+        return { ...b, conteudoTexto: novo.trim() };
       }
       return b;
     }));
   };
-
   const handleTextareaResize = (e: React.ChangeEvent<HTMLTextAreaElement>, blocoId: string) => {
-    e.target.style.height = 'auto';
-    e.target.style.height = e.target.scrollHeight + 'px';
+    e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px';
     atualizarBloco(blocoId, 'conteudoTexto', e.target.value);
   };
 
-  // --- Handlers da "Calculadora" de Refeições ---
-  const adicionarOpcao = (blocoId: string) => {
-    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: [...(b.opcoes || []), { id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '' }] }] } : b));
-  };
+  const adicionarOpcao = (blocoId: string) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: [...(b.opcoes || []), { id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha' }] }] } : b));
+  const removerOpcao = (blocoId: string, opcaoId: string) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).filter(o => o.id !== opcaoId) } : b));
 
-  const removerOpcao = (blocoId: string, opcaoId: string) => {
-    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).filter((o) => o.id !== opcaoId) } : b));
-  };
-
-  const adicionarItem = (blocoId: string, opcaoId: string) => {
-    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
-      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: [...o.itens, { id: `it-${Date.now()}`, quantidade: '', nome: '' }] } : o),
-    } : b));
-  };
-
-  const removerItem = (blocoId: string, opcaoId: string, itemId: string) => {
-    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
-      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: o.itens.filter((i) => i.id !== itemId) } : o),
-    } : b));
-  };
-
-  const atualizarItem = (blocoId: string, opcaoId: string, itemId: string, campo: keyof ItemAlimento, valor: any) => {
-    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
-      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: o.itens.map((i) => i.id === itemId ? { ...i, [campo]: valor } : i) } : o),
-    } : b));
-  };
-
-  const toggleMacroAtivo = (blocoId: string, opcaoId: string, itemId: string, macro: 'cho' | 'ptn' | 'lip' | null) => {
-    setBlocos(blocos.map((b) => b.id === blocoId && b.tipo === 'refeicao' ? {
-      ...b, opcoes: (b.opcoes || []).map((o) => o.id === opcaoId ? { ...o, itens: o.itens.map((i) => i.id === itemId ? { ...i, macroAtivo: macro, macroAlvo: '' } : i) } : o),
-    } : b));
-  };
-
-  const atualizarAlvoMacro = (blocoId: string, opcaoId: string, itemId: string, valor: string) => {
-    setBlocos(blocos.map((b) => {
+  const adicionarItem = (blocoId: string, opcaoId: string, conexao: 'nova_linha' | 'mais' | 'ou' = 'nova_linha', insertAfterId?: string) => {
+    setBlocos(blocos.map(b => {
       if (b.id !== blocoId || b.tipo !== 'refeicao') return b;
       return {
-        ...b,
-        opcoes: (b.opcoes || []).map((o) => {
+        ...b, opcoes: (b.opcoes || []).map(o => {
+          if (o.id !== opcaoId) return o;
+          const newItem = { id: `it-${Date.now()}`, quantidade: '', nome: '', conexao };
+          if (insertAfterId) {
+            const idx = o.itens.findIndex(i => i.id === insertAfterId);
+            if (idx >= 0) {
+              const newItens = [...o.itens];
+              newItens.splice(idx + 1, 0, newItem);
+              return { ...o, itens: newItens };
+            }
+          }
+          return { ...o, itens: [...o.itens, newItem] };
+        })
+      };
+    }));
+  };
+  const removerItem = (blocoId: string, opcaoId: string, itemId: string) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).map(o => o.id === opcaoId ? { ...o, itens: o.itens.filter(i => i.id !== itemId) } : o) } : b));
+  const atualizarItem = (blocoId: string, opcaoId: string, itemId: string, campo: keyof ItemAlimento, valor: any) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).map(o => o.id === opcaoId ? { ...o, itens: o.itens.map(i => i.id === itemId ? { ...i, [campo]: valor } : i) } : o) } : b));
+  const toggleMacroAtivo = (blocoId: string, opcaoId: string, itemId: string, macro: 'cho' | 'ptn' | 'lip' | null) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).map(o => o.id === opcaoId ? { ...o, itens: o.itens.map(i => i.id === itemId ? { ...i, macroAtivo: macro, macroAlvo: '' } : i) } : o) } : b));
+  const atualizarAlvoMacro = (blocoId: string, opcaoId: string, itemId: string, valor: string) => {
+    setBlocos(blocos.map(b => {
+      if (b.id !== blocoId || b.tipo !== 'refeicao') return b;
+      return {
+        ...b, opcoes: (b.opcoes || []).map(o => {
           if (o.id !== opcaoId) return o;
           return {
-            ...o,
-            itens: o.itens.map((i) => {
+            ...o, itens: o.itens.map(i => {
               if (i.id !== itemId) return i;
               let newQtd = i.quantidade;
               if (i.macroAtivo && i.baseMacros && valor !== '') {
-                const target = parseFloat(valor);
-                const base = i.baseMacros[i.macroAtivo];
-                if (base > 0 && !isNaN(target)) {
-                  const pesoExato = (target * 100) / base;
-                  newQtd = `${Math.round(pesoExato / 5) * 5}g`;
-                } else if (base === 0) {
-                  newQtd = '0g';
-                }
+                const target = parseFloat(valor); const base = i.baseMacros[i.macroAtivo];
+                if (base > 0 && !isNaN(target)) newQtd = `${Math.round(((target * 100) / base) / 5) * 5}g`;
+                else if (base === 0) newQtd = '0g';
               }
               return { ...i, macroAlvo: valor, quantidade: newQtd };
-            }),
+            })
           };
-        }),
+        })
       };
     }));
   };
 
-  // --- Handlers das Tabelas Dinâmicas ---
   const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
-
   const adicionarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas') => {
     const newItem = { id: `tab-${Date.now()}`, nome: '', baseMacro: 0 };
     if (tabela === 'proteinas') setTabelaProteinas([...tabelaProteinas, newItem]);
     if (tabela === 'arroz') setTabelaArroz([...tabelaArroz, newItem]);
     if (tabela === 'frutas') setTabelaFrutas([...tabelaFrutas, newItem]);
   };
-
   const removerItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas', id: string) => {
     if (tabela === 'proteinas') setTabelaProteinas(prev => prev.filter(i => i.id !== id));
     if (tabela === 'arroz') setTabelaArroz(prev => prev.filter(i => i.id !== id));
     if (tabela === 'frutas') setTabelaFrutas(prev => prev.filter(i => i.id !== id));
   };
-
   const atualizarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas', id: string, nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string) => {
     const baseMacro = tabela === 'proteinas' ? macros.ptn : macros.cho;
     const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, nome, baseMacro, macrosReal: macros, dbId } : i);
@@ -329,7 +237,6 @@ export default function CriarPrescricao() {
     else if (tabela === 'arroz') setTabelaArroz(updateFn);
     else if (tabela === 'frutas') setTabelaFrutas(updateFn);
   };
-
   const calcularPesoEquivalente = (alvo: string, baseMacro: number) => {
     const alvoNum = parseFloat(alvo);
     if (isNaN(alvoNum) || baseMacro === 0) return '--';
@@ -348,7 +255,70 @@ export default function CriarPrescricao() {
     finally { setSalvandoAlimento(false); }
   };
 
-  // --- Geração do Texto para Salvar e Imprimir ---
+  const gerarTextoPrescricao = () => {
+    let txt = `Nutrição e Educação em Diabetes\nPaciente: ${metadados.pacienteNome}\nData: ${metadados.dataPrescricao}\n\n${'-'.repeat(60)}\n\n`;
+
+    blocos.forEach((bloco) => {
+      if (bloco.tipo === 'condutas' || bloco.tipo === 'texto_livre') {
+        if (bloco.titulo) txt += `${bloco.titulo.toUpperCase()}\n`;
+        txt += `${bloco.conteudoTexto.trim()}\n\n`;
+      } else if (bloco.tipo === 'refeicao') {
+        txt += `${(bloco.nome || '').toUpperCase()}\n`;
+        if (bloco.mostrarMeta && bloco.metaCarboidratos) txt += `META para INSULINA: ${bloco.metaCarboidratos}\n`;
+        
+        const temOpcoesPreenchidas = (bloco.opcoes || []).some(o => o.itens.some(i => i.nome || i.quantidade));
+        
+        if (temOpcoesPreenchidas || bloco.conteudoTexto?.trim()) {
+          if (temOpcoesPreenchidas) {
+            (bloco.opcoes || []).forEach((opcao, idx) => {
+              const temItens = opcao.itens.some(i => i.nome.trim() || i.quantidade.trim());
+              if (!temItens) return;
+
+              txt += (bloco.opcoes!.length > 1) ? `\nOpção ${idx + 1}:\n` : `\nSugestão:\n`;
+              
+              let isPrimeiroItemDaLinha = true;
+              opcao.itens.forEach((item, iIndex) => {
+                if (!item.nome.trim() && !item.quantidade.trim()) return;
+                const isNovaLinha = iIndex === 0 || item.conexao === 'nova_linha' || !item.conexao;
+                const val = `${item.quantidade.trim() ? item.quantidade.trim() + ' ' : ''}${item.nome.trim()}`;
+                
+                if (isNovaLinha) {
+                  if (!isPrimeiroItemDaLinha) txt += '\n+ ';
+                  else txt += ''; 
+                  txt += val;
+                  isPrimeiroItemDaLinha = false;
+                } else {
+                  const con = item.conexao === 'ou' ? ' OU ' : ' + ';
+                  txt += `${con}${val}`;
+                }
+              });
+              txt += `\n`;
+            });
+          }
+          if (bloco.conteudoTexto?.trim()) txt += `\n${bloco.conteudoTexto.trim()}\n`;
+        }
+        txt += `\n`;
+      }
+    });
+
+    if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) {
+      txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`;
+      tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro)}\n`; });
+      txt += `\n`;
+    }
+    if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) {
+      txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`;
+      tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro)}\n`; });
+      txt += `\n`;
+    }
+    if (tabelasSelecionadas.frutas && alvosTabelas.frutas) {
+      txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`;
+      tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro)}\n`; });
+      txt += `\n`;
+    }
+    return txt;
+  };
+
   const handleSalvarPrescricao = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -356,61 +326,9 @@ export default function CriarPrescricao() {
 
     try {
       setLoading(true);
-      let txt = `Nutrição e Educação em Diabetes\nPaciente: ${metadados.pacienteNome}\nData: ${metadados.dataPrescricao}\n\n`;
-      txt += `${'-'.repeat(60)}\n\n`;
-
-      blocos.forEach((bloco) => {
-        if (bloco.tipo === 'condutas' || bloco.tipo === 'texto_livre') {
-          if (bloco.titulo) txt += `${bloco.titulo.toUpperCase()}\n`;
-          txt += `${bloco.conteudoTexto.trim()}\n\n`;
-        } else if (bloco.tipo === 'refeicao') {
-          txt += `${(bloco.nome || '').toUpperCase()}\n`;
-          if (bloco.metaCarboidratos) txt += `META para INSULINA: ${bloco.metaCarboidratos}\n`;
-          
-          const temOpcoesPreenchidas = (bloco.opcoes || []).some(o => o.itens.some(i => i.nome || i.quantidade));
-          
-          if (temOpcoesPreenchidas || bloco.conteudoTexto?.trim()) {
-            if (bloco.conteudoTexto?.trim()) {
-              txt += `\nSugestão (Texto Livre):\n${bloco.conteudoTexto.trim()}\n`;
-            }
-            if (temOpcoesPreenchidas) {
-              (bloco.opcoes || []).forEach((opcao, idx) => {
-                const temItens = opcao.itens.some(i => i.nome.trim() || i.quantidade.trim());
-                if (temItens) {
-                  txt += (bloco.opcoes!.length > 1) ? `\nOpção ${idx + 1}:\n` : `\nSugestão:\n`;
-                  opcao.itens.forEach((item) => {
-                    if (item.nome.trim() || item.quantidade.trim()) {
-                      const qtd = item.quantidade.trim() ? `${item.quantidade.trim()} ` : '';
-                      txt += `+ ${qtd}${item.nome.trim()}\n`;
-                    }
-                  });
-                }
-              });
-            }
-          }
-          txt += `\n`;
-        }
-      });
-
-      if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) {
-        txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`;
-        tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro)}\n`; });
-        txt += `\n`;
-      }
-      if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) {
-        txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`;
-        tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro)}\n`; });
-        txt += `\n`;
-      }
-      if (tabelasSelecionadas.frutas && alvosTabelas.frutas) {
-        txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`;
-        tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro)}\n`; });
-        txt += `\n`;
-      }
-
       const { error: insertError } = await supabase.from('prescricoes').insert([{
         paciente_id: metadados.pacienteId,
-        cardapio_texto: txt,
+        cardapio_texto: gerarTextoPrescricao(),
         orientacoes_selecionadas: [],
       }]);
 
@@ -436,38 +354,137 @@ export default function CriarPrescricao() {
     return window.btoa(binary);
   };
 
+  // Carrega a logo para uso no jsPDF (deve estar em public/logo.jpg)
+  const getLogoBase64 = async (): Promise<string | null> => {
+    try {
+      const response = await fetch('/logo.jpg');
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
   const handleAssinar = async () => {
     if (!certFile || !certPassword) { setSignError('Selecione o certificado e digite a senha.'); return; }
     setIsSigning(true); setSignError(null);
     try {
-      const element = document.getElementById('print-area');
+      const element = document.getElementById('print-body'); // Agora tira foto SÓ do corpo, sem o cabeçalho fake
       if (!element) throw new Error("Área de impressão não encontrada");
 
-      element.classList.remove('hidden', 'print:block');
+      // Torna vísivel pra tirar a foto
+      const printContainer = document.getElementById('print-area');
+      if(printContainer) printContainer.classList.remove('hidden', 'print:block');
+
       const canvas = await html2canvas(element, { scale: 1.5, useCORS: true });
-      element.classList.add('hidden', 'print:block');
+      if(printContainer) printContainer.classList.add('hidden', 'print:block');
 
       const imgData = canvas.toDataURL('image/jpeg', 0.8);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      let heightLeft = pdfHeight, position = 0, currentPage = 1;
+      
+      // Ajuste de margens: Deixamos 45mm no topo para o cabeçalho e 25mm embaixo para o rodapé
+      const topMargin = 45;
+      const bottomMargin = 25;
+      const availableHeight = pageHeight - topMargin - bottomMargin;
+      
+      const imgWidth = pdfWidth - 24; // 12mm de margem cada lado
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
+      let heightLeft = imgHeight;
+      let position = topMargin;
+      let currentPage = 1;
+
+      const logoData = await getLogoBase64();
+
+      // Função que desenha o Cabeçalho e Rodapé em uma página específica do PDF
+      const drawHeaderFooter = (page: number) => {
+        pdf.setPage(page);
+        
+        // Limpa a área do topo e do fundo com retângulos brancos puros
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, 0, pdfWidth, topMargin, 'F');
+        pdf.rect(0, pageHeight - bottomMargin, pdfWidth, bottomMargin, 'F');
+
+        // --- DESENHA CABEÇALHO ---
+        // Logo no canto superior direito
+        if (logoData) {
+          pdf.addImage(logoData, 'JPEG', pdfWidth - 45, 8, 30, 30);
+        }
+        
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(30, 58, 138); // Azul escuro
+        pdf.setFontSize(14);
+        pdf.text("Nutrição e Educação em Diabetes", 12, 18);
+        
+        pdf.setFontSize(13);
+        pdf.text("Paciente:", 12, 26);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(metadados.pacienteNome || '___________________', 35, 26);
+        
+        // Linha pontilhada
+        pdf.setDrawColor(0, 0, 0);
+        pdf.setLineWidth(0.3);
+        pdf.setLineDashPattern([1, 1], 0);
+        pdf.line(12, 32, pdfWidth - 12, 32);
+        pdf.setLineDashPattern([], 0); // Reseta a linha pra sólido no resto do pdf
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        pdf.text("Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909", 12, 38);
+        
+        pdf.setTextColor(0, 102, 204);
+        pdf.text("www.carolinaminhanutri.com", 12, 43);
+        
+        pdf.setTextColor(30, 58, 138);
+        pdf.text(`Data: ${metadados.dataPrescricao}`, 12, 48);
+
+        // --- DESENHA RODAPÉ ---
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFontSize(9);
+        const txt1 = "Carolina de Souza Silva Macedo - Nutricionista e Educadora em Diabetes - CRN 29096";
+        pdf.text(txt1, pdfWidth / 2, pageHeight - 15, { align: "center" });
+        
+        pdf.setTextColor(0, 102, 204);
+        const txt2 = "Tel: (19) 98314-1909   |   E-mail: carolinamacedo.nutri@gmail.com   |   Site: www.carolinaminhanutri.com";
+        pdf.text(txt2, pdfWidth / 2, pageHeight - 10, { align: "center" });
+      };
+
+      // Adiciona o conteúdo na primeira página
+      pdf.addImage(imgData, 'JPEG', 12, position, imgWidth, imgHeight);
+      drawHeaderFooter(1);
+      heightLeft -= availableHeight;
+
+      // Adiciona as páginas seguintes se precisar
       while (heightLeft > 0) {
-        position = heightLeft - pdfHeight; pdf.addPage(); currentPage++;
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
+        position = heightLeft - imgHeight + topMargin; 
+        pdf.addPage();
+        currentPage++;
+        
+        // Insere a imagem da página deslocada para cima (escondendo o que já foi)
+        pdf.addImage(imgData, 'JPEG', 12, position, imgWidth, imgHeight);
+        
+        // O Header tampa o que "vazou" pra cima, e o Footer tampa o que vazou pra baixo
+        drawHeaderFooter(currentPage);
+        
+        heightLeft -= availableHeight;
       }
 
+      // Adiciona a Assinatura na última página
       pdf.setPage(currentPage);
-      const baseY = pageHeight - 30;
-      pdf.setTextColor(0, 0, 0); pdf.setFontSize(16);
-      pdf.text('Carolina de Souza Silva Macedo', 25, baseY);
+      const baseY = pageHeight - 22; // Acima do rodapé
+      pdf.setTextColor(0, 0, 0); pdf.setFontSize(14);
+      const sigName = 'Carolina de Souza Silva Macedo';
+      pdf.text(sigName, 12, baseY);
       pdf.setFontSize(8); 
-      pdf.text(`Assinado de forma digital por Carolina de Souza Silva Macedo`, 25 + pdf.getTextWidth('Carolina de Souza Silva Macedo') + 3, baseY - 2.5);
+      pdf.text(`Assinado de forma digital por ${sigName}`, 12 + pdf.getTextWidth(sigName) + 3, baseY - 1.5);
       
       const pdfArrayBuffer = pdf.output('arraybuffer');
       const response = await fetch('/api/assinar', {
@@ -490,7 +507,18 @@ export default function CriarPrescricao() {
   return (
     <div className="min-h-screen bg-slate-100 relative pb-20 font-sans">
       
-      {/* BARRA SUPERIOR DE AÇÕES */}
+      {/* REGRAS DE IMPRESSÃO (Nativo) */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          @page { 
+            margin-top: 5mm;
+            margin-bottom: 25mm; 
+          }
+          #print-header-spacer { height: 160px; }
+          thead { display: table-header-group; }
+        }
+      `}} />
+
       <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/pacientes" className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
@@ -514,235 +542,265 @@ export default function CriarPrescricao() {
         {success && <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 text-green-700 mx-4"><Check className="w-5 h-5" /> Prescrição salva!</div>}
         {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-red-700 mx-4">✗ {error}</div>}
 
-        {/* =========================================================
-            O "PAPEL" DO EDITOR (ESTILO WORD)
-            ========================================================= */}
         <div className="bg-white shadow-xl border border-slate-200 min-h-[1056px] w-full mx-auto p-10 sm:p-16 mb-8 rounded-sm">
           
-          {/* Cabeçalho Fixo do Documento */}
-          <div className="mb-10 text-slate-800">
+          <div className="mb-10 text-slate-800 relative">
             <h1 className="text-[15pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</h1>
-            
             <div className="flex items-center gap-2 mt-2">
               <span className="text-[13pt] text-[#1e3a8a]">Paciente:</span>
-              <select
-                value={metadados.pacienteId}
-                onChange={handlePacienteChange}
-                className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300 cursor-pointer"
-              >
+              <select value={metadados.pacienteId} onChange={handlePacienteChange} className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300 cursor-pointer">
                 <option value="">Selecione...</option>
                 {pacientes.map((p) => <option key={p.id} value={p.id}>{p.nome_completo}</option>)}
               </select>
             </div>
-
-            <hr className="border-t border-dashed border-slate-400 my-4" />
             
-            <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
-            <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
-            
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[11pt] text-[#1e3a8a]">Data:</span>
-              <input 
-                type="text" 
-                value={metadados.dataPrescricao} 
-                onChange={handleDataChange} 
-                className="text-[11pt] text-[#1e3a8a] w-32 outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300"
-              />
+            {/* LOGO VISUAL NO MODO WEB (Opcional, só para visualização) */}
+            <div className="absolute top-0 right-0 opacity-20 pointer-events-none">
+               {/* Se quiser mostrar na tela web também */}
             </div>
 
+            <hr className="border-t border-dashed border-slate-400 my-4" />
+            <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
+            <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[11pt] text-[#1e3a8a]">Data:</span>
+              <input type="text" value={metadados.dataPrescricao} onChange={handleDataChange} className="text-[11pt] text-[#1e3a8a] w-32 outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300" />
+            </div>
             <h2 className="text-[13pt] font-bold underline mt-8 mb-6 text-black">Distribuição dos carboidratos por refeição:</h2>
           </div>
 
-          {/* RENDERIZAÇÃO DOS BLOCOS */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             {blocos.map((bloco, index) => (
-              <div key={bloco.id} className="relative group border border-transparent hover:border-slate-200 rounded-lg p-4 -mx-4 transition-colors">
+              <div key={bloco.id} className="relative group border border-transparent hover:border-slate-100 rounded-lg p-2 md:p-4 -mx-2 md:-mx-4 transition-colors">
                 
-                {/* Controles Flutuantes (Só aparecem no hover) */}
-                <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-white shadow-sm border border-slate-200 rounded-md px-1 py-0.5 z-10">
-                  <button type="button" onClick={() => moverBloco(index, 'cima')} disabled={index === 0} className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowUp className="w-4 h-4"/></button>
-                  <button type="button" onClick={() => moverBloco(index, 'baixo')} disabled={index === blocos.length - 1} className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowDown className="w-4 h-4"/></button>
-                  <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                  <button type="button" onClick={() => removerBloco(bloco.id)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                {/* Header / Barra de Controles Invisível para Colapsar */}
+                <div className="flex items-center justify-between cursor-pointer mb-2 opacity-30 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-2 flex-1" onClick={() => atualizarBloco(bloco.id, 'colapsado', !bloco.colapsado)}>
+                    <div className="flex items-center gap-1 font-bold text-slate-400 uppercase text-[10px] tracking-wider">
+                      {bloco.tipo === 'condutas' && <ListChecks className="w-3 h-3"/>}
+                      {bloco.tipo === 'texto_livre' && <Type className="w-3 h-3"/>}
+                      {bloco.tipo === 'refeicao' && <Utensils className="w-3 h-3"/>}
+                      <span>{bloco.tipo.replace('_', ' ')}</span>
+                    </div>
+                    {bloco.colapsado && (
+                      <span className="ml-2 normal-case font-medium text-slate-500 truncate max-w-[200px] md:max-w-md">
+                        - {bloco.tipo === 'refeicao' ? (bloco.nome || 'Refeição sem nome') : (bloco.titulo || 'Conteúdo oculto')}
+                      </span>
+                    )}
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${bloco.colapsado ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-white shadow-sm border border-slate-200 rounded-md px-1 py-0.5 z-10" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" onClick={() => moverBloco(index, 'cima')} disabled={index === 0} className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5"/></button>
+                    <button type="button" onClick={() => moverBloco(index, 'baixo')} disabled={index === blocos.length - 1} className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5"/></button>
+                    <div className="w-px h-3 bg-slate-300 mx-1"></div>
+                    <button type="button" onClick={() => removerBloco(bloco.id)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5"/></button>
+                  </div>
                 </div>
 
-                {/* --- TIPO: REFEIÇÃO (Com Calculadora Invisível) --- */}
-                {bloco.tipo === 'refeicao' && (
-                  <div className="flex flex-col gap-1.5">
-                    <input 
-                      type="text" 
-                      value={bloco.nome} 
-                      onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} 
-                      placeholder="Título da Refeição (Ex: Café da Manhã)" 
-                      className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 w-full bg-transparent"
-                    />
-                    
-                    <div className="flex items-center gap-1.5 text-[#0066cc] font-semibold text-[11pt]">
-                      <span>META para INSULINA:</span>
-                      <input 
-                        type="text" 
-                        value={bloco.metaCarboidratos} 
-                        onChange={(e) => atualizarBloco(bloco.id, 'metaCarboidratos', e.target.value)} 
-                        placeholder="Ex: até 30g de Carboidratos" 
-                        className="flex-1 outline-none border-b border-dashed border-transparent hover:border-[#0066cc] bg-transparent placeholder-[#80bfff]"
-                      />
-                    </div>
-
-                    {/* Ferramenta de Cálculo e Adição de Itens (invisível até interagir) */}
-                    <div className="mt-2 space-y-2">
-                      {(bloco.opcoes || []).map((opcao, idx) => (
-                        <div key={opcao.id} className="relative">
-                          {(bloco.opcoes || []).length > 1 && (
-                            <div className="flex items-center justify-between mb-1 mt-3">
-                              <span className="text-[11pt] font-bold text-[#b45309]">Opção {idx + 1}</span>
-                              <button type="button" onClick={() => removerOpcao(bloco.id, opcao.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
-                            </div>
-                          )}
-
-                          {opcao.itens.map((item) => {
-                            const qtdNum = parseQtd(item.quantidade);
-                            const calcM = (base?: number) => base ? ((base * qtdNum) / 100).toFixed(1) : '--';
-
-                            return (
-                              <div key={item.id} className="flex flex-col gap-1 mb-1 bg-transparent hover:bg-slate-50 border-l-2 border-transparent hover:border-emerald-200 pl-2 py-1 group/item transition-colors">
-                                <div className="flex items-center gap-2">
-                                  <div className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100 transition-opacity"><GripVertical className="w-4 h-4" /></div>
-                                  <span className="text-[11pt] font-semibold text-black">+</span>
-                                  <input
-                                    type="text"
-                                    value={item.quantidade}
-                                    onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)}
-                                    placeholder="100g"
-                                    className="w-16 px-1 py-0.5 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black"
-                                  />
-                                  <div className="flex-1">
-                                    <BuscaAlimento 
-                                      valorInicial={item.nome}
-                                      onSelect={(nome, macros, dbId) => {
-                                        setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId } : i) } : o) } : b));
-                                      }}
-                                    />
-                                  </div>
-                                  
-                                  <button type="button" onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.baseMacros?.cho || 0), ptn: String(item.baseMacros?.ptn || 0), lip: String(item.baseMacros?.lip || 0) })} className="p-1 text-slate-300 hover:text-emerald-600 opacity-0 group-hover/item:opacity-100 transition-opacity"><Pencil className="w-3.5 h-3.5" /></button>
-                                  <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>
-                                </div>
-
-                                <div className="flex items-center pl-8 gap-2 opacity-30 focus-within:opacity-100 hover:opacity-100 transition-opacity">
-                                  <div className="flex items-center gap-1.5">
-                                    <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'cho' ? null : 'cho')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'cho' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>C: {calcM(item.baseMacros?.cho)}</button>
-                                    <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'ptn' ? null : 'ptn')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'ptn' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>P: {calcM(item.baseMacros?.ptn)}</button>
-                                    <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'lip' ? null : 'lip')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'lip' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>L: {calcM(item.baseMacros?.lip)}</button>
-                                  </div>
-                                  {item.macroAtivo && (
-                                    <div className="flex items-center gap-1 bg-[#0066cc]/5 px-2 py-0.5 rounded border border-[#0066cc]/20">
-                                      <Target className="w-3 h-3 text-[#0066cc]" />
-                                      <span className="text-[10px] font-semibold text-[#0066cc]">Alvo {item.macroAtivo.toUpperCase()} (g):</span>
-                                      <input type="number" value={item.macroAlvo || ''} onChange={(e) => atualizarAlvoMacro(bloco.id, opcao.id, item.id, e.target.value)} className="w-10 text-[10px] font-mono bg-transparent border-b border-dashed border-[#0066cc]/50 outline-none text-center" />
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id)} className="text-emerald-600/50 hover:text-emerald-600 font-medium text-[9pt] flex items-center gap-1 pl-3 mt-1 transition-colors"><Plus className="w-3.5 h-3.5" /> Adicionar linha de alimento</button>
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => adicionarOpcao(bloco.id)} className="text-slate-400 text-[10pt] font-medium hover:text-emerald-600 transition flex items-center gap-1 mt-3"><Plus className="w-3.5 h-3.5"/> Adicionar Opção (Substituição)</button>
-                    </div>
-
-                    {/* Texto Livre Extra da Refeição */}
-                    <div className="mt-4">
-                      <textarea 
-                        value={bloco.conteudoTexto} 
-                        onChange={(e) => handleTextareaResize(e, bloco.id)} 
-                        placeholder="Texto ou observação livre para esta refeição (Aparecerá abaixo das sugestões)" 
-                        rows={1}
-                        className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* --- TIPO: TEXTO LIVRE --- */}
-                {bloco.tipo === 'texto_livre' && (
-                  <div className="flex flex-col gap-1.5">
-                    <input 
-                      type="text" 
-                      value={bloco.titulo} 
-                      onChange={(e) => atualizarBloco(bloco.id, 'titulo', e.target.value)} 
-                      placeholder="Subtítulo (Ex: Lanches da Tarde)" 
-                      className="text-[12pt] font-bold text-[#b45309] outline-none placeholder-slate-300 w-full bg-transparent"
-                    />
-                    <textarea 
-                      value={bloco.conteudoTexto} 
-                      onChange={(e) => handleTextareaResize(e, bloco.id)} 
-                      placeholder="Digite o conteúdo livre aqui..." 
-                      rows={3}
-                      className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed"
-                    />
-                  </div>
-                )}
-
-                {/* --- TIPO: CONDUTAS --- */}
-                {bloco.tipo === 'condutas' && (
-                  <div className="flex flex-col gap-1.5">
-                    <p className="text-[12pt] font-bold text-[#b45309]">Orientações / Condutas</p>
-                    <textarea 
-                      value={bloco.conteudoTexto} 
-                      onChange={(e) => handleTextareaResize(e, bloco.id)} 
-                      placeholder="Digite as condutas aqui ou selecione no menu de atalhos abaixo..." 
-                      rows={4}
-                      className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-slate-50 focus:bg-white border border-transparent focus:border-slate-200 p-2 rounded leading-relaxed"
-                    />
-                    
-                    <button type="button" onClick={() => atualizarBloco(bloco.id, 'expandido', !bloco.expandido)} className="mt-2 flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-600 font-medium">
-                      <span>Atalhos de Condutas do Banco</span>
-                      <ChevronDown className={`w-4 h-4 transition-transform ${bloco.expandido ? 'rotate-180' : ''}`} />
-                    </button>
-                    {bloco.expandido && (
-                      <div className="mt-2 p-4 bg-slate-50 rounded border border-slate-200 text-sm">
-                        {Object.entries(configsPorCategoria).map(([categoria, configs]) => (
-                          <div key={categoria} className="mb-3 last:mb-0">
-                            <h4 className="font-bold text-slate-800 mb-1">{categoria}</h4>
-                            {configs.map((config) => (
-                              <label key={config.id} className="flex items-start gap-2 cursor-pointer hover:bg-white p-1 rounded">
-                                <input type="checkbox" checked={bloco.conteudoTexto.includes(config.conteudo)} onChange={(e) => toggleCondutaBloco(bloco.id, config.conteudo, e.target.checked)} className="mt-1" />
-                                <span className="text-slate-700">{config.titulo}</span>
-                              </label>
-                            ))}
+                {!bloco.colapsado && (
+                  <>
+                    {/* --- TIPO: REFEIÇÃO --- */}
+                    {bloco.tipo === 'refeicao' && (
+                      <div className="flex flex-col gap-1.5">
+                        <input 
+                          type="text" 
+                          value={bloco.nome} 
+                          onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} 
+                          placeholder="Título da Refeição (Ex: Café da Manhã)" 
+                          className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 w-full bg-transparent"
+                        />
+                        
+                        {bloco.mostrarMeta ? (
+                          <div className="flex items-center gap-1.5 text-[#0066cc] font-semibold text-[11pt] group/meta relative">
+                            <span>META para INSULINA:</span>
+                            <input 
+                              type="text" 
+                              value={bloco.metaCarboidratos} 
+                              onChange={(e) => atualizarBloco(bloco.id, 'metaCarboidratos', e.target.value)} 
+                              placeholder="Ex: até 30g de Carboidratos" 
+                              className="flex-1 outline-none border-b border-dashed border-transparent hover:border-[#0066cc] bg-transparent placeholder-[#80bfff]"
+                            />
+                            <button onClick={() => atualizarBloco(bloco.id, 'mostrarMeta', false)} className="opacity-0 group-hover/meta:opacity-100 p-1 text-slate-300 hover:text-red-500" title="Remover linha de meta"><Trash2 className="w-3.5 h-3.5"/></button>
                           </div>
-                        ))}
+                        ) : (
+                          <button onClick={() => { atualizarBloco(bloco.id, 'mostrarMeta', true); if(!bloco.metaCarboidratos) atualizarBloco(bloco.id, 'metaCarboidratos', 'até 30g de Carboidratos'); }} className="text-[9pt] text-[#0066cc] opacity-60 hover:opacity-100 transition-opacity font-semibold flex items-center gap-1 w-max">
+                            <Plus className="w-3 h-3"/> Adicionar Meta para Insulina
+                          </button>
+                        )}
+
+                        <div className="mt-2">
+                          {(bloco.opcoes || []).map((opcao, idx) => (
+                            <div key={opcao.id} className="relative">
+                              {(bloco.opcoes || []).length > 1 ? (
+                                <div className="flex items-center justify-between mb-1 mt-4">
+                                  <span className="text-[11pt] font-bold text-[#b45309]">Opção {idx + 1}:</span>
+                                  <button type="button" onClick={() => removerOpcao(bloco.id, opcao.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
+                                </div>
+                              ) : (
+                                <div className="text-[11pt] font-bold text-black mb-1 mt-2">Sugestão:</div>
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-y-1 gap-x-2">
+                                {opcao.itens.map((item, iIndex) => {
+                                  const isNovaLinha = iIndex === 0 || item.conexao === 'nova_linha' || !item.conexao;
+                                  const calcM = (base?: number) => base ? ((base * parseQtd(item.quantidade)) / 100).toFixed(1) : '--';
+
+                                  return (
+                                    <Fragment key={item.id}>
+                                      {isNovaLinha && iIndex > 0 && <div className="w-full basis-full h-0 m-0 p-0" />}
+
+                                      <div className="flex flex-col flex-1 min-w-[280px] relative group/item bg-transparent hover:bg-slate-50 p-1.5 rounded border border-transparent hover:border-slate-200 transition-colors">
+                                        <div className="flex items-center gap-1.5 w-full">
+                                          <div className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100"><GripVertical className="w-4 h-4" /></div>
+
+                                          {iIndex > 0 ? (
+                                            <select
+                                              value={item.conexao || 'nova_linha'}
+                                              onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)}
+                                              className="bg-slate-100 text-emerald-700 font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors"
+                                              title="Alterar conexão"
+                                            >
+                                              <option value="nova_linha">↵ Nova Linha</option>
+                                              <option value="mais"> + </option>
+                                              <option value="ou"> OU </option>
+                                            </select>
+                                          ) : (
+                                            <span className="text-[11pt] font-semibold text-black px-1 opacity-0 pointer-events-none">+</span>
+                                          )}
+
+                                          <input
+                                            type="text"
+                                            value={item.quantidade}
+                                            onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)}
+                                            placeholder="Qtd (100g)"
+                                            className="w-16 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black"
+                                          />
+                                          <div className="flex-1 min-w-[120px]">
+                                            <BuscaAlimento 
+                                              valorInicial={item.nome}
+                                              onSelect={(nome, macros, dbId) => setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId } : i) } : o) } : b))}
+                                            />
+                                          </div>
+                                          
+                                          <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'mais', item.id)} className="opacity-0 group-hover/item:opacity-100 p-1 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded transition-all ml-1" title="Adicionar alimento na frente (+)"><Plus className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => setModalEdicao({ isOpen: true, id: item.dbId || '', nome: item.nome, cho: String(item.baseMacros?.cho || 0), ptn: String(item.baseMacros?.ptn || 0), lip: String(item.baseMacros?.lip || 0) })} className="p-1 text-slate-300 hover:text-emerald-600 opacity-0 group-hover/item:opacity-100 transition-opacity"><Pencil className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        </div>
+
+                                        <div className="flex items-center pl-7 gap-2 opacity-20 focus-within:opacity-100 hover:opacity-100 transition-opacity mt-0.5">
+                                          <div className="flex items-center gap-1.5">
+                                            <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'cho' ? null : 'cho')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'cho' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>C: {calcM(item.baseMacros?.cho)}</button>
+                                            <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'ptn' ? null : 'ptn')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'ptn' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>P: {calcM(item.baseMacros?.ptn)}</button>
+                                            <button type="button" onClick={() => toggleMacroAtivo(bloco.id, opcao.id, item.id, item.macroAtivo === 'lip' ? null : 'lip')} className={`px-1.5 py-0.5 text-[10px] font-mono border rounded ${item.macroAtivo === 'lip' ? 'bg-[#0066cc]/10 border-[#0066cc]/30 text-[#0066cc]' : 'bg-transparent border-slate-200 text-slate-400'}`}>L: {calcM(item.baseMacros?.lip)}</button>
+                                          </div>
+                                          {item.macroAtivo && (
+                                            <div className="flex items-center gap-1 bg-[#0066cc]/5 px-2 py-0.5 rounded border border-[#0066cc]/20">
+                                              <Target className="w-3 h-3 text-[#0066cc]" />
+                                              <span className="text-[10px] font-semibold text-[#0066cc]">Alvo {item.macroAtivo.toUpperCase()} (g):</span>
+                                              <input type="number" value={item.macroAlvo || ''} onChange={(e) => atualizarAlvoMacro(bloco.id, opcao.id, item.id, e.target.value)} className="w-10 text-[10px] font-mono bg-transparent border-b border-dashed border-[#0066cc]/50 outline-none text-center" />
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </Fragment>
+                                  );
+                                })}
+                              </div>
+                              
+                              <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'nova_linha')} className="text-emerald-600/50 hover:text-emerald-600 font-medium text-[9pt] flex items-center gap-1 pl-3 mt-1 mb-2 transition-colors"><Plus className="w-3.5 h-3.5" /> Adicionar nova linha de alimento abaixo</button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => adicionarOpcao(bloco.id)} className="text-slate-400 text-[10pt] font-medium hover:text-emerald-600 transition flex items-center gap-1 mt-3"><Plus className="w-3.5 h-3.5"/> Adicionar Opção (Substituição Inteira)</button>
+                        </div>
+
+                        <div className="mt-4">
+                          <textarea 
+                            value={bloco.conteudoTexto} 
+                            onChange={(e) => handleTextareaResize(e, bloco.id)} 
+                            placeholder="Adicionar recado livre logo abaixo dessa refeição (Opcional)" 
+                            rows={1}
+                            className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors"
+                          />
+                        </div>
                       </div>
                     )}
-                  </div>
+
+                    {/* --- TIPO: TEXTO LIVRE --- */}
+                    {bloco.tipo === 'texto_livre' && (
+                      <div className="flex flex-col gap-1.5 mt-2">
+                        <input 
+                          type="text" 
+                          value={bloco.titulo} 
+                          onChange={(e) => atualizarBloco(bloco.id, 'titulo', e.target.value)} 
+                          placeholder="Subtítulo (Ex: Lanches da Tarde)" 
+                          className="text-[12pt] font-bold text-[#b45309] outline-none placeholder-slate-300 w-full bg-transparent"
+                        />
+                        <textarea 
+                          value={bloco.conteudoTexto} 
+                          onChange={(e) => handleTextareaResize(e, bloco.id)} 
+                          placeholder="Digite o conteúdo livre aqui..." 
+                          rows={3}
+                          className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors"
+                        />
+                      </div>
+                    )}
+
+                    {/* --- TIPO: CONDUTAS --- */}
+                    {bloco.tipo === 'condutas' && (
+                      <div className="flex flex-col gap-1.5 mt-2">
+                        <p className="text-[12pt] font-bold text-[#b45309]">Orientações / Condutas</p>
+                        <textarea 
+                          value={bloco.conteudoTexto} 
+                          onChange={(e) => handleTextareaResize(e, bloco.id)} 
+                          placeholder="Digite as condutas aqui ou selecione no menu de atalhos abaixo..." 
+                          rows={4}
+                          className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-slate-50 focus:bg-white border border-transparent focus:border-slate-200 p-2 rounded leading-relaxed"
+                        />
+                        
+                        <button type="button" onClick={() => atualizarBloco(bloco.id, 'expandido', !bloco.expandido)} className="mt-2 flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-600 font-medium">
+                          <span>Atalhos de Condutas do Banco</span>
+                          <ChevronDown className={`w-4 h-4 transition-transform ${bloco.expandido ? 'rotate-180' : ''}`} />
+                        </button>
+                        {bloco.expandido && (
+                          <div className="mt-2 p-4 bg-slate-50 rounded border border-slate-200 text-sm">
+                            {Object.entries(configsPorCategoria).map(([categoria, configs]) => (
+                              <div key={categoria} className="mb-3 last:mb-0">
+                                <h4 className="font-bold text-slate-800 mb-1">{categoria}</h4>
+                                {configs.map((config) => (
+                                  <label key={config.id} className="flex items-start gap-2 cursor-pointer hover:bg-white p-1 rounded">
+                                    <input type="checkbox" checked={bloco.conteudoTexto.includes(config.conteudo)} onChange={(e) => toggleCondutaBloco(bloco.id, config.conteudo, e.target.checked)} className="mt-1" />
+                                    <span className="text-slate-700">{config.titulo}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}
           </div>
 
-          {/* BOTÕES PARA ADICIONAR BLOCOS */}
           <div className="mt-10 pt-6 border-t border-dashed border-slate-300 flex flex-wrap gap-3">
             <button type="button" onClick={() => adicionarBloco('refeicao')} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-medium transition text-sm"><Plus className="w-4 h-4"/> Adicionar Refeição</button>
             <button type="button" onClick={() => adicionarBloco('texto_livre')} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-medium transition text-sm"><AlignLeft className="w-4 h-4"/> Parágrafo Livre</button>
             <button type="button" onClick={() => adicionarBloco('condutas')} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-medium transition text-sm"><ListChecks className="w-4 h-4"/> Bloco de Condutas</button>
           </div>
-
         </div>
 
         {/* TABELAS DE EQUIVALENTES */}
         <div className="max-w-4xl mx-auto bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-10">
-          <div 
-            className="bg-slate-50 px-8 py-5 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
-            onClick={() => setTabelasColapsadas(!tabelasColapsadas)}
-          >
+          <div className="bg-slate-50 px-8 py-5 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => setTabelasColapsadas(!tabelasColapsadas)}>
             <h2 className="text-lg font-bold text-slate-800">Anexar Tabelas de Equivalentes Automáticas no PDF</h2>
             <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${tabelasColapsadas ? 'rotate-180' : ''}`} />
           </div>
 
           {!tabelasColapsadas && (
             <div className="p-8 space-y-4 border-t border-slate-200">
-              
               <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
                 <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
                   <label className="flex items-center gap-3 cursor-pointer flex-1">
@@ -826,165 +884,187 @@ export default function CriarPrescricao() {
                   </div>
                 )}
               </div>
-
             </div>
           )}
         </div>
       </div>
 
       {/* =========================================================
-          ÁREA DE IMPRESSÃO (PDF LAYOUT)
+          ÁREA DE IMPRESSÃO (NATIVA)
           ========================================================= */}
-      <div id="print-area" className="hidden print:block bg-white text-black font-sans max-w-[210mm] mx-auto p-12 text-[11pt]">
+      <div id="print-area" className="hidden print:table w-full bg-white text-black font-sans text-[11pt]">
+        
+        {/* O Thead garante que o cabeçalho se repita em toda folha física impressa */}
+        <thead className="table-header-group">
+          <tr>
+            <td>
+              <div className="relative mb-6 pb-4">
+                <img src="/logo.jpg" alt="Logo" className="absolute top-0 right-0 w-28 h-28 object-contain" />
+                <p className="text-[14pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</p>
+                <p className="text-[14pt] text-[#1e3a8a] mt-1">Paciente: <span className="font-bold">{metadados.pacienteNome || '___________________'}</span></p>
+                <hr className="border-t border-dashed border-black my-4 w-[80%]" />
+                <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
+                <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
+                <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
+                <p className="text-[12pt] font-bold underline mt-6 mb-2">Distribuição dos carboidratos por refeição:</p>
+              </div>
+            </td>
+          </tr>
+        </thead>
 
-        <div className="mb-6">
-          <p className="text-[14pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</p>
-          <p className="text-[14pt] text-[#1e3a8a] mt-1">Paciente: <span className="font-bold">{metadados.pacienteNome || '___________________'}</span></p>
-          
-          <hr className="border-t border-dashed border-black my-4" />
-          
-          <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
-          <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
-          <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
-          
-          <p className="text-[12pt] font-bold underline mt-6 mb-2">Distribuição dos carboidratos por refeição:</p>
-        </div>
-
-        <div className="space-y-6">
-          {blocos.map((bloco) => {
-            if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
-              return (
-                <div key={bloco.id} className="break-inside-avoid">
-                  <p className="font-bold text-[12pt] text-[#b45309] mb-1">Orientações Gerais</p>
-                  <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
-                </div>
-              );
-            }
-
-            if (bloco.tipo === 'texto_livre' && (bloco.titulo || bloco.conteudoTexto?.trim())) {
-              return (
-                <div key={bloco.id} className="break-inside-avoid">
-                  {bloco.titulo && <p className="font-bold text-[12pt] text-[#b45309] mb-1">{bloco.titulo}</p>}
-                  <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
-                </div>
-              );
-            }
-
-            if (bloco.tipo === 'refeicao') {
-              const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade));
-              if (!temOpcoes && !bloco.conteudoTexto?.trim()) return null;
-
-              return (
-                <div key={bloco.id} className="break-inside-avoid mb-6">
-                  {bloco.nome && <p className="font-bold text-[12pt] text-black">{bloco.nome}</p>}
-                  
-                  {bloco.metaCarboidratos && (
-                    <p className="text-[11pt] font-semibold text-[#0066cc]">META para INSULINA: {bloco.metaCarboidratos}</p>
-                  )}
-                  
-                  {(bloco.opcoes || []).map((opcao, idx) => {
-                    const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade);
-                    if (!temItemPreenchido) return null;
-
+        <tbody className="table-row-group">
+          <tr>
+            <td id="print-body">
+              <div className="space-y-6">
+                {blocos.map((bloco) => {
+                  if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
                     return (
-                      <div key={opcao.id} className="mt-2">
-                        {bloco.opcoes!.length > 1 ? (
-                          <p className="font-bold text-[#b45309] text-[11pt] mb-1">Opção {idx + 1}:</p>
-                        ) : (
-                          <p className="font-bold text-black text-[11pt] mb-1">Sugestão:</p>
-                        )}
-                        <div className="text-[11pt] text-black leading-relaxed">
-                          {opcao.itens.map((item) => {
-                            if (!item.nome && !item.quantidade) return null;
-                            return (
-                              <div key={item.id}>
-                                + {item.quantidade && <span className="font-semibold">{item.quantidade} </span>} {item.nome}
-                              </div>
-                            );
-                          })}
-                        </div>
+                      <div key={bloco.id} className="break-inside-avoid">
+                        <p className="font-bold text-[12pt] text-[#b45309] mb-1">Orientações Gerais</p>
+                        <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
                       </div>
                     );
-                  })}
+                  }
 
-                  {bloco.conteudoTexto?.trim() && (
-                    <div className="mt-2 text-[11pt] whitespace-pre-line text-black leading-relaxed">
-                      {bloco.conteudoTexto}
+                  if (bloco.tipo === 'texto_livre' && (bloco.titulo || bloco.conteudoTexto?.trim())) {
+                    return (
+                      <div key={bloco.id} className="break-inside-avoid">
+                        {bloco.titulo && <p className="font-bold text-[12pt] text-[#b45309] mb-1">{bloco.titulo}</p>}
+                        <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
+                      </div>
+                    );
+                  }
+
+                  if (bloco.tipo === 'refeicao') {
+                    const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade));
+                    if (!temOpcoes && !bloco.conteudoTexto?.trim()) return null;
+
+                    return (
+                      <div key={bloco.id} className="break-inside-avoid mb-6">
+                        {bloco.nome && <p className="font-bold text-[12pt] text-black">{bloco.nome}</p>}
+                        
+                        {bloco.mostrarMeta && bloco.metaCarboidratos && (
+                          <p className="text-[11pt] font-semibold text-[#0066cc]">META para INSULINA: {bloco.metaCarboidratos}</p>
+                        )}
+                        
+                        {(bloco.opcoes || []).map((opcao, idx) => {
+                          const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade);
+                          if (!temItemPreenchido) return null;
+
+                          const linhasPdf: ItemAlimento[][] = [];
+                          let curLinhaPdf: ItemAlimento[] = [];
+                          opcao.itens.forEach((item, i) => {
+                            if (i === 0 || item.conexao === 'nova_linha' || !item.conexao) {
+                              if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
+                              curLinhaPdf = [item];
+                            } else curLinhaPdf.push(item);
+                          });
+                          if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
+
+                          return (
+                            <div key={opcao.id} className="mt-2">
+                              {bloco.opcoes!.length > 1 ? (
+                                <p className="font-bold text-[#b45309] text-[11pt] mb-1">Opção {idx + 1}:</p>
+                              ) : (
+                                <p className="font-bold text-black text-[11pt] mb-1">Sugestão:</p>
+                              )}
+                              <div className="text-[11pt] text-black leading-relaxed">
+                                {linhasPdf.map((linha, lIdx) => (
+                                  <div key={lIdx} className="mb-1">
+                                    {lIdx > 0 ? '+ ' : ''}
+                                    {linha.map((item, iIdx) => {
+                                        const qtd = item.quantidade ? <span className="font-semibold">{item.quantidade} </span> : null;
+                                        const con = iIdx > 0 ? (item.conexao === 'ou' ? ' OU ' : ' + ') : '';
+                                        return (
+                                          <span key={item.id}>
+                                            {iIdx > 0 && <span className="font-bold mx-1">{con}</span>}
+                                            {qtd}{item.nome}
+                                          </span>
+                                        );
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {bloco.conteudoTexto?.trim() && (
+                          <div className="mt-2 text-[11pt] whitespace-pre-line text-black leading-relaxed">
+                            {bloco.conteudoTexto}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+
+              {/* TABELAS DE EQUIVALENTES (Impressão) */}
+              {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.frutas) && (
+                <div className="mt-10 break-before-auto">
+                  {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
+                    <div className="mb-8 break-inside-avoid">
+                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
+                      <table className="w-full border-collapse border border-black text-[10.5pt]">
+                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade / Peso</th></tr></thead>
+                        <tbody>
+                          {tabelaProteinas.map((item, idx) => item.nome ? (
+                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}</td></tr>
+                          ) : null)}
+                          <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 italic">Ajustar (1 ovo = ~6g ptn)</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
+                    <div className="mb-8 break-inside-avoid">
+                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
+                      <table className="w-full border-collapse border border-black text-[10.5pt]">
+                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade Equivalente</th></tr></thead>
+                        <tbody>
+                          {tabelaArroz.map((item, idx) => item.nome ? (
+                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}</td></tr>
+                          ) : null)}
+                        </tbody>
+                      </table>
+                      <p className="text-[10pt] mt-1 font-bold text-gray-800">Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)</p>
+                    </div>
+                  )}
+
+                  {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
+                    <div className="mb-8 break-inside-avoid">
+                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
+                      <table className="w-full border-collapse border border-black text-[10.5pt]">
+                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Peso / Quantidade</th></tr></thead>
+                        <tbody>
+                          {tabelaFrutas.map((item, idx) => item.nome ? (
+                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}</td></tr>
+                          ) : null)}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
-              );
-            }
-            return null;
-          })}
-        </div>
-
-        {/* TABELAS DE EQUIVALENTES PDF */}
-        {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.frutas) && (
-          <div className="mt-10 break-before-auto">
-            {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
-              <div className="mb-8 break-inside-avoid">
-                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
-                <table className="w-full border-collapse border border-black text-[10.5pt]">
-                  <thead>
-                    <tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade / Peso</th></tr>
-                  </thead>
-                  <tbody>
-                    {tabelaProteinas.map((item, idx) => item.nome ? (
-                      <tr key={idx}>
-                        <td className="border border-black px-3 py-1">{item.nome}</td>
-                        <td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}</td>
-                      </tr>
-                    ) : null)}
-                    <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 italic">Ajustar (1 ovo = ~6g ptn)</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
-              <div className="mb-8 break-inside-avoid">
-                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
-                <table className="w-full border-collapse border border-black text-[10.5pt]">
-                  <thead>
-                    <tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade Equivalente</th></tr>
-                  </thead>
-                  <tbody>
-                    {tabelaArroz.map((item, idx) => item.nome ? (
-                      <tr key={idx}>
-                        <td className="border border-black px-3 py-1">{item.nome}</td>
-                        <td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}</td>
-                      </tr>
-                    ) : null)}
-                  </tbody>
-                </table>
-                <p className="text-[10pt] mt-1 font-bold text-gray-800">Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)</p>
-              </div>
-            )}
-
-            {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
-              <div className="mb-8 break-inside-avoid">
-                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
-                <table className="w-full border-collapse border border-black text-[10.5pt]">
-                  <thead>
-                    <tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Peso / Quantidade</th></tr>
-                  </thead>
-                  <tbody>
-                    {tabelaFrutas.map((item, idx) => item.nome ? (
-                      <tr key={idx}>
-                        <td className="border border-black px-3 py-1">{item.nome}</td>
-                        <td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}</td>
-                      </tr>
-                    ) : null)}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </td>
+          </tr>
+        </tbody>
       </div>
 
-      {/* MODAIS (Assinatura e Edição) */}
+      {/* RODAPÉ DE IMPRESSÃO (Nativo) */}
+      <div className="hidden print:flex fixed bottom-0 left-0 w-full bg-white flex-col items-center justify-center pt-2 pb-2 z-50">
+        <p className="text-[10pt] text-black">Carolina de Souza Silva Macedo - Nutricionista e Educadora em Diabetes - CRN 29096</p>
+        <div className="flex items-center gap-4 mt-1 text-[10pt] text-[#0066cc]">
+          <span className="flex items-center gap-1"><Smartphone className="w-3.5 h-3.5 text-black" /> (19) 98314-1909</span>
+          <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-black" /> carolinamacedo.nutri@gmail.com</span>
+          <span className="flex items-center gap-1"><Globe className="w-3.5 h-3.5 text-black" /> www.carolinaminhanutri.com</span>
+        </div>
+      </div>
+
+      {/* MODAL DE ASSINATURA */}
       {isSignModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -1005,6 +1085,7 @@ export default function CriarPrescricao() {
         </div>
       )}
 
+      {/* MODAL DE EDIÇÃO DE ALIMENTO */}
       {modalEdicao.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden">
