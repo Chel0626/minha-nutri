@@ -63,7 +63,7 @@ const parseQtd = (str: string) => {
   return match ? parseFloat(match[0].replace(',', '.')) : 0;
 };
 
-// Bases fixas iniciais
+// Bases fixas
 const TABELA_PROTEINAS = [
   { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 },
   { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 }
@@ -133,7 +133,6 @@ export default function CriarPrescricao() {
   };
   const handleDataChange = (e: React.ChangeEvent<HTMLInputElement>) => setMetadados({ ...metadados, dataPrescricao: e.target.value });
 
-  // --- Handlers de Blocos ---
   const adicionarBloco = (tipo: TipoBloco) => {
     const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, conteudoTexto: '', mostrarMeta: true, colapsado: false };
     if (tipo === 'refeicao') {
@@ -354,7 +353,7 @@ export default function CriarPrescricao() {
     return window.btoa(binary);
   };
 
-  // Carrega a logo para uso no jsPDF (deve estar em public/logo.jpg)
+  // Carrega a logo para injetar direto no jsPDF
   const getLogoBase64 = async (): Promise<string | null> => {
     try {
       const response = await fetch('/logo.jpg');
@@ -374,10 +373,9 @@ export default function CriarPrescricao() {
     if (!certFile || !certPassword) { setSignError('Selecione o certificado e digite a senha.'); return; }
     setIsSigning(true); setSignError(null);
     try {
-      const element = document.getElementById('print-body'); // Agora tira foto SÓ do corpo, sem o cabeçalho fake
+      const element = document.getElementById('print-body'); 
       if (!element) throw new Error("Área de impressão não encontrada");
 
-      // Torna vísivel pra tirar a foto
       const printContainer = document.getElementById('print-area');
       if(printContainer) printContainer.classList.remove('hidden', 'print:block');
 
@@ -389,12 +387,11 @@ export default function CriarPrescricao() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       
-      // Ajuste de margens: Deixamos 45mm no topo para o cabeçalho e 25mm embaixo para o rodapé
-      const topMargin = 45;
+      const topMargin = 55; // Aumentei o topo para dar espaço pra logo
       const bottomMargin = 25;
       const availableHeight = pageHeight - topMargin - bottomMargin;
       
-      const imgWidth = pdfWidth - 24; // 12mm de margem cada lado
+      const imgWidth = pdfWidth - 24; 
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       let heightLeft = imgHeight;
@@ -403,49 +400,37 @@ export default function CriarPrescricao() {
 
       const logoData = await getLogoBase64();
 
-      // Função que desenha o Cabeçalho e Rodapé em uma página específica do PDF
       const drawHeaderFooter = (page: number) => {
         pdf.setPage(page);
         
-        // Limpa a área do topo e do fundo com retângulos brancos puros
         pdf.setFillColor(255, 255, 255);
         pdf.rect(0, 0, pdfWidth, topMargin, 'F');
         pdf.rect(0, pageHeight - bottomMargin, pdfWidth, bottomMargin, 'F');
 
-        // --- DESENHA CABEÇALHO ---
-        // Logo no canto superior direito
-        if (logoData) {
-          pdf.addImage(logoData, 'JPEG', pdfWidth - 45, 8, 30, 30);
+        // SÓ IMPRIME O CABEÇALHO NA PRIMEIRA PÁGINA
+        if (page === 1) {
+          if (logoData) {
+            pdf.addImage(logoData, 'JPEG', pdfWidth - 48, 12, 36, 36);
+          }
+          
+          pdf.setFont("helvetica", "normal");
+          pdf.setTextColor(30, 58, 138); 
+          pdf.setFontSize(14);
+          pdf.text("Nutrição e Educação em Diabetes", 12, 28);
+          
+          pdf.setFontSize(13);
+          pdf.text("Paciente:", 12, 36);
+          pdf.setFont("helvetica", "bold");
+          pdf.text(metadados.pacienteNome || '___________________', 32, 36);
+          
+          pdf.setDrawColor(0, 0, 0);
+          pdf.setLineWidth(0.3);
+          pdf.setLineDashPattern([1, 1], 0);
+          pdf.line(12, 42, pdfWidth - 12, 42); // Linha passa debaixo da logo
+          pdf.setLineDashPattern([], 0); 
         }
-        
-        pdf.setFont("helvetica", "normal");
-        pdf.setTextColor(30, 58, 138); // Azul escuro
-        pdf.setFontSize(14);
-        pdf.text("Nutrição e Educação em Diabetes", 12, 18);
-        
-        pdf.setFontSize(13);
-        pdf.text("Paciente:", 12, 26);
-        pdf.setFont("helvetica", "bold");
-        pdf.text(metadados.pacienteNome || '___________________', 35, 26);
-        
-        // Linha pontilhada
-        pdf.setDrawColor(0, 0, 0);
-        pdf.setLineWidth(0.3);
-        pdf.setLineDashPattern([1, 1], 0);
-        pdf.line(12, 32, pdfWidth - 12, 32);
-        pdf.setLineDashPattern([], 0); // Reseta a linha pra sólido no resto do pdf
 
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(10);
-        pdf.text("Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909", 12, 38);
-        
-        pdf.setTextColor(0, 102, 204);
-        pdf.text("www.carolinaminhanutri.com", 12, 43);
-        
-        pdf.setTextColor(30, 58, 138);
-        pdf.text(`Data: ${metadados.dataPrescricao}`, 12, 48);
-
-        // --- DESENHA RODAPÉ ---
+        // RODAPÉ: Imprime em todas as páginas
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(0, 0, 0);
         pdf.setFontSize(9);
@@ -457,29 +442,23 @@ export default function CriarPrescricao() {
         pdf.text(txt2, pdfWidth / 2, pageHeight - 10, { align: "center" });
       };
 
-      // Adiciona o conteúdo na primeira página
       pdf.addImage(imgData, 'JPEG', 12, position, imgWidth, imgHeight);
       drawHeaderFooter(1);
       heightLeft -= availableHeight;
 
-      // Adiciona as páginas seguintes se precisar
       while (heightLeft > 0) {
         position = heightLeft - imgHeight + topMargin; 
         pdf.addPage();
         currentPage++;
         
-        // Insere a imagem da página deslocada para cima (escondendo o que já foi)
         pdf.addImage(imgData, 'JPEG', 12, position, imgWidth, imgHeight);
-        
-        // O Header tampa o que "vazou" pra cima, e o Footer tampa o que vazou pra baixo
         drawHeaderFooter(currentPage);
         
         heightLeft -= availableHeight;
       }
 
-      // Adiciona a Assinatura na última página
       pdf.setPage(currentPage);
-      const baseY = pageHeight - 22; // Acima do rodapé
+      const baseY = pageHeight - 22; 
       pdf.setTextColor(0, 0, 0); pdf.setFontSize(14);
       const sigName = 'Carolina de Souza Silva Macedo';
       pdf.text(sigName, 12, baseY);
@@ -507,18 +486,16 @@ export default function CriarPrescricao() {
   return (
     <div className="min-h-screen bg-slate-100 relative pb-20 font-sans">
       
-      {/* REGRAS DE IMPRESSÃO (Nativo) */}
+      {/* REGRAS DE IMPRESSÃO NATIVAS */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          @page { 
-            margin-top: 5mm;
-            margin-bottom: 25mm; 
-          }
-          #print-header-spacer { height: 160px; }
+          @page { margin-top: 15mm; margin-bottom: 25mm; }
+          body { -webkit-print-color-adjust: exact; }
           thead { display: table-header-group; }
         }
       `}} />
 
+      {/* HEADER DE NAVEGAÇÃO */}
       <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/pacientes" className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
@@ -542,24 +519,28 @@ export default function CriarPrescricao() {
         {success && <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 text-green-700 mx-4"><Check className="w-5 h-5" /> Prescrição salva!</div>}
         {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-red-700 mx-4">✗ {error}</div>}
 
+        {/* EDITOR VISUAL */}
         <div className="bg-white shadow-xl border border-slate-200 min-h-[1056px] w-full mx-auto p-10 sm:p-16 mb-8 rounded-sm">
           
-          <div className="mb-10 text-slate-800 relative">
-            <h1 className="text-[15pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-[13pt] text-[#1e3a8a]">Paciente:</span>
-              <select value={metadados.pacienteId} onChange={handlePacienteChange} className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300 cursor-pointer">
-                <option value="">Selecione...</option>
-                {pacientes.map((p) => <option key={p.id} value={p.id}>{p.nome_completo}</option>)}
-              </select>
+          <div className="mb-10 text-slate-800">
+            <div className="flex justify-between items-end mb-4">
+              <div>
+                <h1 className="text-[15pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</h1>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[13pt] text-[#1e3a8a]">Paciente:</span>
+                  <select value={metadados.pacienteId} onChange={handlePacienteChange} className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300 cursor-pointer">
+                    <option value="">Selecione...</option>
+                    {pacientes.map((p) => <option key={p.id} value={p.id}>{p.nome_completo}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* LOGO (Deve existir em /public/logo.jpg) */}
+              <img src="/logo.jpg" alt="Logo Carolina Macedo" className="w-36 h-36 object-contain" />
             </div>
             
-            {/* LOGO VISUAL NO MODO WEB (Opcional, só para visualização) */}
-            <div className="absolute top-0 right-0 opacity-20 pointer-events-none">
-               {/* Se quiser mostrar na tela web também */}
-            </div>
-
-            <hr className="border-t border-dashed border-slate-400 my-4" />
+            {/* A linha passa de ponta a ponta, DEPOIS da Logo */}
+            <hr className="border-t border-dashed border-slate-400 my-4 w-full" />
+            
             <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
             <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
             <div className="flex items-center gap-2 mt-1">
@@ -573,7 +554,6 @@ export default function CriarPrescricao() {
             {blocos.map((bloco, index) => (
               <div key={bloco.id} className="relative group border border-transparent hover:border-slate-100 rounded-lg p-2 md:p-4 -mx-2 md:-mx-4 transition-colors">
                 
-                {/* Header / Barra de Controles Invisível para Colapsar */}
                 <div className="flex items-center justify-between cursor-pointer mb-2 opacity-30 group-hover:opacity-100 transition-opacity">
                   <div className="flex items-center gap-2 flex-1" onClick={() => atualizarBloco(bloco.id, 'colapsado', !bloco.colapsado)}>
                     <div className="flex items-center gap-1 font-bold text-slate-400 uppercase text-[10px] tracking-wider">
@@ -600,27 +580,14 @@ export default function CriarPrescricao() {
 
                 {!bloco.colapsado && (
                   <>
-                    {/* --- TIPO: REFEIÇÃO --- */}
                     {bloco.tipo === 'refeicao' && (
                       <div className="flex flex-col gap-1.5">
-                        <input 
-                          type="text" 
-                          value={bloco.nome} 
-                          onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} 
-                          placeholder="Título da Refeição (Ex: Café da Manhã)" 
-                          className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 w-full bg-transparent"
-                        />
+                        <input type="text" value={bloco.nome} onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} placeholder="Título da Refeição (Ex: Café da Manhã)" className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 w-full bg-transparent" />
                         
                         {bloco.mostrarMeta ? (
                           <div className="flex items-center gap-1.5 text-[#0066cc] font-semibold text-[11pt] group/meta relative">
                             <span>META para INSULINA:</span>
-                            <input 
-                              type="text" 
-                              value={bloco.metaCarboidratos} 
-                              onChange={(e) => atualizarBloco(bloco.id, 'metaCarboidratos', e.target.value)} 
-                              placeholder="Ex: até 30g de Carboidratos" 
-                              className="flex-1 outline-none border-b border-dashed border-transparent hover:border-[#0066cc] bg-transparent placeholder-[#80bfff]"
-                            />
+                            <input type="text" value={bloco.metaCarboidratos} onChange={(e) => atualizarBloco(bloco.id, 'metaCarboidratos', e.target.value)} placeholder="Ex: até 30g de Carboidratos" className="flex-1 outline-none border-b border-dashed border-transparent hover:border-[#0066cc] bg-transparent placeholder-[#80bfff]" />
                             <button onClick={() => atualizarBloco(bloco.id, 'mostrarMeta', false)} className="opacity-0 group-hover/meta:opacity-100 p-1 text-slate-300 hover:text-red-500" title="Remover linha de meta"><Trash2 className="w-3.5 h-3.5"/></button>
                           </div>
                         ) : (
@@ -655,12 +622,7 @@ export default function CriarPrescricao() {
                                           <div className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100"><GripVertical className="w-4 h-4" /></div>
 
                                           {iIndex > 0 ? (
-                                            <select
-                                              value={item.conexao || 'nova_linha'}
-                                              onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)}
-                                              className="bg-slate-100 text-emerald-700 font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors"
-                                              title="Alterar conexão"
-                                            >
+                                            <select value={item.conexao || 'nova_linha'} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)} className="bg-slate-100 text-emerald-700 font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors" title="Alterar conexão">
                                               <option value="nova_linha">↵ Nova Linha</option>
                                               <option value="mais"> + </option>
                                               <option value="ou"> OU </option>
@@ -669,18 +631,9 @@ export default function CriarPrescricao() {
                                             <span className="text-[11pt] font-semibold text-black px-1 opacity-0 pointer-events-none">+</span>
                                           )}
 
-                                          <input
-                                            type="text"
-                                            value={item.quantidade}
-                                            onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)}
-                                            placeholder="Qtd (100g)"
-                                            className="w-16 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black"
-                                          />
+                                          <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
                                           <div className="flex-1 min-w-[120px]">
-                                            <BuscaAlimento 
-                                              valorInicial={item.nome}
-                                              onSelect={(nome, macros, dbId) => setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId } : i) } : o) } : b))}
-                                            />
+                                            <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId } : i) } : o) } : b))} />
                                           </div>
                                           
                                           <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'mais', item.id)} className="opacity-0 group-hover/item:opacity-100 p-1 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded transition-all ml-1" title="Adicionar alimento na frente (+)"><Plus className="w-3.5 h-3.5" /></button>
@@ -715,13 +668,7 @@ export default function CriarPrescricao() {
                         </div>
 
                         <div className="mt-4">
-                          <textarea 
-                            value={bloco.conteudoTexto} 
-                            onChange={(e) => handleTextareaResize(e, bloco.id)} 
-                            placeholder="Adicionar recado livre logo abaixo dessa refeição (Opcional)" 
-                            rows={1}
-                            className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors"
-                          />
+                          <textarea value={bloco.conteudoTexto} onChange={(e) => handleTextareaResize(e, bloco.id)} placeholder="Adicionar recado livre logo abaixo dessa refeição (Opcional)" rows={1} className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors" />
                         </div>
                       </div>
                     )}
@@ -729,20 +676,8 @@ export default function CriarPrescricao() {
                     {/* --- TIPO: TEXTO LIVRE --- */}
                     {bloco.tipo === 'texto_livre' && (
                       <div className="flex flex-col gap-1.5 mt-2">
-                        <input 
-                          type="text" 
-                          value={bloco.titulo} 
-                          onChange={(e) => atualizarBloco(bloco.id, 'titulo', e.target.value)} 
-                          placeholder="Subtítulo (Ex: Lanches da Tarde)" 
-                          className="text-[12pt] font-bold text-[#b45309] outline-none placeholder-slate-300 w-full bg-transparent"
-                        />
-                        <textarea 
-                          value={bloco.conteudoTexto} 
-                          onChange={(e) => handleTextareaResize(e, bloco.id)} 
-                          placeholder="Digite o conteúdo livre aqui..." 
-                          rows={3}
-                          className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors"
-                        />
+                        <input type="text" value={bloco.titulo} onChange={(e) => atualizarBloco(bloco.id, 'titulo', e.target.value)} placeholder="Subtítulo (Ex: Lanches da Tarde)" className="text-[12pt] font-bold text-[#b45309] outline-none placeholder-slate-300 w-full bg-transparent" />
+                        <textarea value={bloco.conteudoTexto} onChange={(e) => handleTextareaResize(e, bloco.id)} placeholder="Digite o conteúdo livre aqui..." rows={3} className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-transparent leading-relaxed border-l border-dashed border-slate-200 hover:border-slate-300 pl-3 py-1 transition-colors" />
                       </div>
                     )}
 
@@ -750,13 +685,7 @@ export default function CriarPrescricao() {
                     {bloco.tipo === 'condutas' && (
                       <div className="flex flex-col gap-1.5 mt-2">
                         <p className="text-[12pt] font-bold text-[#b45309]">Orientações / Condutas</p>
-                        <textarea 
-                          value={bloco.conteudoTexto} 
-                          onChange={(e) => handleTextareaResize(e, bloco.id)} 
-                          placeholder="Digite as condutas aqui ou selecione no menu de atalhos abaixo..." 
-                          rows={4}
-                          className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-slate-50 focus:bg-white border border-transparent focus:border-slate-200 p-2 rounded leading-relaxed"
-                        />
+                        <textarea value={bloco.conteudoTexto} onChange={(e) => handleTextareaResize(e, bloco.id)} placeholder="Digite as condutas aqui ou selecione no menu de atalhos abaixo..." rows={4} className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-slate-50 focus:bg-white border border-transparent focus:border-slate-200 p-2 rounded leading-relaxed" />
                         
                         <button type="button" onClick={() => atualizarBloco(bloco.id, 'expandido', !bloco.expandido)} className="mt-2 flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-600 font-medium">
                           <span>Atalhos de Condutas do Banco</span>
@@ -890,19 +819,26 @@ export default function CriarPrescricao() {
       </div>
 
       {/* =========================================================
-          ÁREA DE IMPRESSÃO (NATIVA)
+          ÁREA DE IMPRESSÃO (Nativa do Navegador - Renderiza para o PDF e Impressora)
           ========================================================= */}
       <div id="print-area" className="hidden print:table w-full bg-white text-black font-sans text-[11pt]">
         
-        {/* O Thead garante que o cabeçalho se repita em toda folha física impressa */}
+        {/* THEAD repete APENAS no topo do documento por padrão em tabelas sem borders,
+            se quebrar no navegador, a regra CSS trata. */}
         <thead className="table-header-group">
           <tr>
             <td>
-              <div className="relative mb-6 pb-4">
-                <img src="/logo.jpg" alt="Logo" className="absolute top-0 right-0 w-28 h-28 object-contain" />
-                <p className="text-[14pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</p>
-                <p className="text-[14pt] text-[#1e3a8a] mt-1">Paciente: <span className="font-bold">{metadados.pacienteNome || '___________________'}</span></p>
-                <hr className="border-t border-dashed border-black my-4 w-[80%]" />
+              <div className="relative mb-6 pb-4 pt-4">
+                <div className="flex justify-between items-end mb-4">
+                  <div>
+                    <p className="text-[14pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</p>
+                    <p className="text-[14pt] text-[#1e3a8a] mt-1">Paciente: <span className="font-bold">{metadados.pacienteNome || '___________________'}</span></p>
+                  </div>
+                  <img src="/logo.jpg" alt="Logo" className="w-36 h-36 object-contain" />
+                </div>
+                
+                <hr className="border-t border-dashed border-black my-4 w-full" />
+                
                 <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
                 <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
                 <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
@@ -912,9 +848,9 @@ export default function CriarPrescricao() {
           </tr>
         </thead>
 
-        <tbody className="table-row-group">
+        <tbody className="table-row-group" id="print-body">
           <tr>
-            <td id="print-body">
+            <td>
               <div className="space-y-6">
                 {blocos.map((bloco) => {
                   if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
@@ -1054,8 +990,8 @@ export default function CriarPrescricao() {
         </tbody>
       </div>
 
-      {/* RODAPÉ DE IMPRESSÃO (Nativo) */}
-      <div className="hidden print:flex fixed bottom-0 left-0 w-full bg-white flex-col items-center justify-center pt-2 pb-2 z-50">
+      {/* RODAPÉ FIXO (Para impressão nativa do navegador) */}
+      <div className="hidden print:flex fixed bottom-0 left-0 w-full bg-white flex-col items-center justify-center pt-2 pb-2 z-50 border-t border-slate-200">
         <p className="text-[10pt] text-black">Carolina de Souza Silva Macedo - Nutricionista e Educadora em Diabetes - CRN 29096</p>
         <div className="flex items-center gap-4 mt-1 text-[10pt] text-[#0066cc]">
           <span className="flex items-center gap-1"><Smartphone className="w-3.5 h-3.5 text-black" /> (19) 98314-1909</span>
