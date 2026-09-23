@@ -21,6 +21,36 @@ interface MetadadosPrescricion { pacienteId: string; pacienteNome: string; faseC
 
 const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
+// ----- COLE ESTE BLOCO AQUI -----
+const calcularTotalMacros = (opcao?: Opcao) => {
+  let total = { cho: 0, ptn: 0, lip: 0, kcal: 0 };
+  if (!opcao || !opcao.itens) return { cho: '0.0', ptn: '0.0', lip: '0.0', kcal: '0' };
+  
+  opcao.itens.forEach(item => {
+    const qtdNum = parseQtd(item.quantidade);
+    if (qtdNum > 0 && item.baseMacros) {
+      let bNum = 100;
+      const mN = (item.porcao_padrao || '100g').match(/[\d.,]+/);
+      if (mN) bNum = parseFloat(mN[0].replace(',', '.'));
+      
+      if (bNum > 0) {
+        total.cho += (item.baseMacros.cho * qtdNum) / bNum;
+        total.ptn += (item.baseMacros.ptn * qtdNum) / bNum;
+        total.lip += (item.baseMacros.lip * qtdNum) / bNum;
+      }
+    }
+  });
+  total.kcal = (total.cho * 4) + (total.ptn * 4) + (total.lip * 9);
+  
+  return {
+    cho: total.cho.toFixed(1),
+    ptn: total.ptn.toFixed(1),
+    lip: total.lip.toFixed(1),
+    kcal: Math.round(total.kcal).toString()
+  };
+};
+// ---------------------------------
+
 const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
 const TABELA_ARROZ = [ { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 }, { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 }, { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 }, { nome: 'Milho-verde (enlatado)', base: 17.1 } ];
 const TABELA_FRUTAS = [ { nome: 'Abacaxi', base: 12.3 }, { nome: 'Banana Prata', base: 26.0 }, { nome: 'Goiaba', base: 13.0 }, { nome: 'Laranja', base: 8.9 }, { nome: 'Mamão', base: 11.6 }, { nome: 'Manga', base: 15.0 }, { nome: 'Maçã', base: 15.2 }, { nome: 'Melancia', base: 6.8 }, { nome: 'Melão', base: 7.5 }, { nome: 'Morango', base: 6.8 }, { nome: 'Uva', base: 17.3 } ];
@@ -676,7 +706,26 @@ function PrescricaoEditor() {
                     {/* --- TIPO: REFEIÇÃO --- */}
                     {bloco.tipo === 'refeicao' && (
                       <div className="flex flex-col gap-1.5">
-                        <input type="text" value={bloco.nome} onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} placeholder="Título da Refeição (Ex: Café da Manhã)" className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 w-full bg-transparent" />
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <input type="text" value={bloco.nome} onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} placeholder="Título da Refeição (Ex: Café da Manhã)" className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 flex-1 bg-transparent" />
+                          
+                          {/* PAINEL DE MACROS AUTOMÁTICO */}
+                          {(() => {
+                            const macros = calcularTotalMacros(bloco.opcoes?.[0]);
+                            if (macros.kcal === '0') return null;
+                            return (
+                              <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-100 rounded-md px-3 py-1.5 text-[11px] font-mono text-slate-600 shadow-sm shrink-0" title={bloco.opcoes && bloco.opcoes.length > 1 ? "Calculado com base na Opção 1" : "Total de Macros"}>
+                                <span>C: <span className="font-bold text-blue-600">{macros.cho}g</span></span>
+                                <span className="text-slate-300">|</span>
+                                <span>P: <span className="font-bold text-red-500">{macros.ptn}g</span></span>
+                                <span className="text-slate-300">|</span>
+                                <span>L: <span className="font-bold text-amber-500">{macros.lip}g</span></span>
+                                <span className="text-slate-300">|</span>
+                                <span className="font-bold text-slate-800">{macros.kcal} kcal</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
                         
                         {bloco.mostrarMeta ? (
                           <div className="flex items-center gap-1.5 text-[#0066cc] font-semibold text-[11pt] group/meta relative">
