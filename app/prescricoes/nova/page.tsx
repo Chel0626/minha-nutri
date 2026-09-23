@@ -28,7 +28,13 @@ interface Opcao { id: string; itens: ItemAlimento[]; }
 type TipoBloco = 'condutas' | 'refeicao' | 'texto_livre';
 interface Bloco { id: string; tipo: TipoBloco; nome?: string; metaCarboidratos?: string; mostrarMeta?: boolean; opcoes?: Opcao[]; titulo?: string; conteudoTexto: string; expandido?: boolean; colapsado?: boolean; }
 interface ItemTabela { id: string; dbId?: string; nome: string; baseMacro: number; macrosReal?: { cho: number; ptn: number; lip: number }; porcao_padrao?: string; }
-interface MetadadosPrescricion { pacienteId: string; pacienteNome: string; faseCaloricas: string; dataPrescricao: string; }
+interface MetadadosPrescricion { 
+  pacienteId: string; 
+  pacienteNome: string; 
+  faseCaloricas: string; 
+  dataPrescricao: string;
+  tituloDistribuicao?: string; 
+}
 
 const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
@@ -106,7 +112,13 @@ function PrescricaoEditor() {
   const pacienteQueryId = searchParams?.get('pacienteId');
 
   const dataAtual = new Date().toLocaleDateString('pt-BR');
-  const [metadados, setMetadados] = useState<MetadadosPrescricion>({ pacienteId: '', pacienteNome: '', faseCaloricas: '', dataPrescricao: dataAtual });
+  const [metadados, setMetadados] = useState<MetadadosPrescricion>({ 
+    pacienteId: '', 
+    pacienteNome: '', 
+    faseCaloricas: '', 
+    dataPrescricao: dataAtual,
+    tituloDistribuicao: 'Distribuição dos carboidratos por refeição:'
+  });
   const [tabelasColapsadas, setTabelasColapsadas] = useState(true);
 
   const [blocos, setBlocos] = useState<Bloco[]>([{
@@ -136,6 +148,10 @@ function PrescricaoEditor() {
   const [isSigning, setIsSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
 
+  // ESTADOS DO DRAG AND DROP
+  const [draggableItem, setDraggableItem] = useState<string | null>(null);
+  const [dragTarget, setDragTarget] = useState<string | null>(null);
+
   useEffect(() => {
     if (editId) {
       carregarDietaSalva(editId);
@@ -159,7 +175,13 @@ function PrescricaoEditor() {
         setTabelaProteinas(d.tabelaProteinas || TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
         setTabelaArroz(d.tabelaArroz || TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
         setTabelaFrutas(d.tabelaFrutas || TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-        if (d.metadados) setMetadados(d.metadados);
+        
+        if (d.metadados) {
+          setMetadados({
+            ...d.metadados,
+            tituloDistribuicao: d.metadados.tituloDistribuicao || 'Distribuição dos carboidratos por refeição:'
+          });
+        }
       } else {
         alert("Aviso: Esta é uma prescrição antiga salva apenas em modo de leitura de texto.");
         setMetadados(prev => ({ ...prev, pacienteId: data.paciente_id }));
@@ -176,6 +198,7 @@ function PrescricaoEditor() {
     setMetadados({ ...metadados, pacienteId: e.target.value, pacienteNome: paciente?.nome_completo || '' });
   };
   const handleDataChange = (e: React.ChangeEvent<HTMLInputElement>) => setMetadados({ ...metadados, dataPrescricao: e.target.value });
+  const handleTituloDistribuicaoChange = (e: React.ChangeEvent<HTMLInputElement>) => setMetadados({ ...metadados, tituloDistribuicao: e.target.value });
 
   const adicionarBloco = (tipo: TipoBloco) => {
     const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, conteudoTexto: '', mostrarMeta: true, colapsado: false };
@@ -548,6 +571,14 @@ function PrescricaoEditor() {
           pdf.text("www.carolinaminhanutri.com", 12, 53);
           pdf.setTextColor(30, 58, 138); 
           pdf.text(`Data: ${metadados.dataPrescricao}`, 12, 58);
+          
+          if (metadados.tituloDistribuicao) {
+             pdf.setTextColor(0, 0, 0);
+             pdf.setFontSize(12);
+             pdf.setFont("helvetica", "bold");
+             pdf.text(metadados.tituloDistribuicao, 12, 66);
+             position = topMargin + 15;
+          }
         }
 
         pdf.setFont("helvetica", "normal");
@@ -598,6 +629,68 @@ function PrescricaoEditor() {
     } catch (err: any) { setSignError(err.message || 'Erro inesperado.'); } 
     finally { setIsSigning(false); }
   };
+
+  // ----- FUNÇÕES DE DRAG AND DROP -----
+  const handleDragStart = (e: React.DragEvent, blocoId: string, opcaoId: string, index: number) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ blocoId, opcaoId, index }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragTarget !== targetId) {
+      setDragTarget(targetId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (dragTarget === targetId) {
+      setDragTarget(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetBlocoId: string, targetOpcaoId: string, targetIndex: number) => {
+    e.preventDefault();
+    setDragTarget(null);
+    setDraggableItem(null);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      const { blocoId: sourceBlocoId, opcaoId: sourceOpcaoId, index: sourceIndex } = data;
+
+      // Garante que só reordena itens dentro da mesma opção/refeição
+      if (sourceBlocoId === targetBlocoId && sourceOpcaoId === targetOpcaoId && sourceIndex !== targetIndex) {
+        setBlocos(prev => prev.map(b => {
+          if (b.id !== targetBlocoId) return b;
+          return {
+            ...b,
+            opcoes: b.opcoes?.map(o => {
+              if (o.id !== targetOpcaoId) return o;
+              const newItens = [...o.itens];
+              const [removed] = newItens.splice(sourceIndex, 1);
+              newItens.splice(targetIndex, 0, removed);
+              
+              // Se o item caiu na primeira linha, limpar o operador "+" ou "OU"
+              if (newItens.length > 0 && newItens[0].conexao !== 'nova_linha') {
+                 newItens[0].conexao = 'nova_linha';
+              }
+              
+              return { ...o, itens: newItens };
+            })
+          };
+        }));
+      }
+    } catch (err) {
+      console.error("Erro ao processar o Drag and Drop", err);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDragTarget(null);
+    setDraggableItem(null);
+  };
+  // -------------------------------------
 
   return (
     <div className="min-h-screen bg-slate-100 relative pb-20 font-sans">
@@ -670,7 +763,15 @@ function PrescricaoEditor() {
               <span className="text-[11pt] text-[#1e3a8a]">Data:</span>
               <input type="text" value={metadados.dataPrescricao} onChange={handleDataChange} className="text-[11pt] text-[#1e3a8a] w-32 outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300" />
             </div>
-            <h2 className="text-[13pt] font-bold underline mt-8 mb-6 text-black">Distribuição dos carboidratos por refeição:</h2>
+            
+            {/* TÍTULO EDITÁVEL */}
+            <input 
+              type="text" 
+              value={metadados.tituloDistribuicao || ''} 
+              onChange={handleTituloDistribuicaoChange} 
+              className="text-[13pt] font-bold underline mt-8 mb-6 text-black w-full outline-none bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#1e3a8a]" 
+              placeholder="Ex: Distribuição dos carboidratos por refeição:"
+            />
           </div>
 
           <div className="space-y-4">
@@ -711,7 +812,6 @@ function PrescricaoEditor() {
                           
                           {(() => {
                             const macros = calcularTotalMacros(bloco.opcoes?.[0]);
-                            if (macros.kcal === '0') return null;
                             return (
                               <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-100 rounded-md px-3 py-1.5 text-[11px] font-mono text-slate-600 shadow-sm shrink-0" title={bloco.opcoes && bloco.opcoes.length > 1 ? "Calculado com base na Opção 1" : "Total de Macros"}>
                                 <span>C: <span className="font-bold text-blue-600">{macros.cho}g</span></span>
@@ -751,7 +851,6 @@ function PrescricaoEditor() {
                                   {/* PAINEL DE MACROS ESPECÍFICO DESTA OPÇÃO */}
                                   {(() => {
                                     const macros = calcularTotalMacros(opcao);
-                                    if (macros.kcal === '0') return null;
                                     return (
                                       <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded px-2 py-0.5 text-[10px] font-mono text-slate-500 shadow-sm" title={`Macros desta opção`}>
                                         <span>C: <span className="font-bold text-blue-600">{macros.cho}g</span></span>
@@ -773,6 +872,7 @@ function PrescricaoEditor() {
 
                               <div className="flex flex-col gap-y-1">
                                 {opcao.itens.map((item, iIndex) => {
+                                  const targetId = `${bloco.id}-${opcao.id}-${iIndex}`;
                                   const isNovaLinha = iIndex === 0 || item.conexao === 'nova_linha' || !item.conexao;
                                   
                                   const calcM = (base?: number) => {
@@ -788,9 +888,30 @@ function PrescricaoEditor() {
                                     <Fragment key={item.id}>
                                       {isNovaLinha && iIndex > 0 && <div className="w-full h-1" />}
 
-                                      <div className="flex flex-col flex-1 min-w-[250px] max-w-full relative group/item bg-transparent hover:bg-slate-50 p-1.5 rounded border border-transparent hover:border-slate-200 transition-colors">
+                                      <div 
+                                        draggable={draggableItem === item.id}
+                                        onDragStart={(e) => handleDragStart(e, bloco.id, opcao.id, iIndex)}
+                                        onDragOver={(e) => handleDragOver(e, targetId)}
+                                        onDragLeave={(e) => handleDragLeave(e, targetId)}
+                                        onDrop={(e) => handleDrop(e, bloco.id, opcao.id, iIndex)}
+                                        onDragEnd={handleDragEnd}
+                                        className={`flex flex-col flex-1 min-w-[250px] max-w-full relative group/item p-1.5 rounded transition-all ${
+                                          dragTarget === targetId 
+                                            ? 'border-t-2 border-t-emerald-500 bg-emerald-50 shadow-sm' 
+                                            : 'bg-transparent border border-transparent hover:bg-slate-50 hover:border-slate-200'
+                                        }`}
+                                      >
                                         <div className="flex items-center gap-1 sm:gap-1.5 w-full flex-wrap xl:flex-nowrap">
-                                          <div className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100"><GripVertical className="w-4 h-4" /></div>
+                                          
+                                          {/* GRIP - ATIVA O DRAG E DROP */}
+                                          <div 
+                                            className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100 px-1 py-2 -ml-1"
+                                            onMouseEnter={() => setDraggableItem(item.id)}
+                                            onMouseLeave={() => setDraggableItem(null)}
+                                            title="Clique e arraste para reordenar"
+                                          >
+                                            <GripVertical className="w-4 h-4" />
+                                          </div>
 
                                           {iIndex > 0 ? (
                                             <select value={item.conexao || 'nova_linha'} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)} className="bg-slate-100 text-emerald-700 font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors" title="Alterar conexão">
@@ -852,7 +973,6 @@ function PrescricaoEditor() {
 
                                           <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 sm:w-20 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
                                           
-                                          {/* FIX OVERFLOW-HIDDEN HERE */}
                                           <div className="flex-1 min-w-[100px] relative">
                                             <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => {
                                                 setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g' } : i) } : o) } : b))
@@ -1063,7 +1183,11 @@ function PrescricaoEditor() {
                 <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
                 <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
                 <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
-                <p className="text-[12pt] font-bold underline mt-6 mb-2">Distribuição dos carboidratos por refeição:</p>
+                
+                {/* TÍTULO EDITÁVEL NA IMPRESSÃO */}
+                {metadados.tituloDistribuicao && (
+                  <p className="text-[12pt] font-bold underline mt-6 mb-2">{metadados.tituloDistribuicao}</p>
+                )}
               </div>
             </td>
           </tr>
