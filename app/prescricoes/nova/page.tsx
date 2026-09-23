@@ -496,10 +496,10 @@ function PrescricaoEditor() {
       if (!element) throw new Error("Área de impressão não encontrada");
 
       const printContainer = document.getElementById('print-area');
-      if(printContainer) printContainer.classList.remove('hidden', 'print:block');
+      if(printContainer) printContainer.classList.remove('hidden', 'print:table');
 
       const canvas = await html2canvas(element, { scale: 1.5, useCORS: true });
-      if(printContainer) printContainer.classList.add('hidden', 'print:block');
+      if(printContainer) printContainer.classList.add('hidden', 'print:table');
 
       const imgData = canvas.toDataURL('image/jpeg', 0.8);
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -610,6 +610,18 @@ function PrescricaoEditor() {
         }
       `}} />
 
+      {/* TOASTS DE NOTIFICAÇÃO FLUTUANTES */}
+      {success && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold animate-in fade-in slide-in-from-top-4 print:hidden">
+          <Check className="w-5 h-5" /> Prescrição {editId ? 'atualizada' : 'salva'} com sucesso!
+        </div>
+      )}
+      {error && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold animate-in fade-in slide-in-from-top-4 print:hidden">
+          <X className="w-5 h-5" /> {error}
+        </div>
+      )}
+
       {/* HEADER DE NAVEGAÇÃO */}
       <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -631,8 +643,6 @@ function PrescricaoEditor() {
       </div>
 
       <div className="max-w-4xl mx-auto mt-8 print:hidden">
-        {success && <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 text-green-700 mx-4"><Check className="w-5 h-5" /> Prescrição salva com sucesso!</div>}
-        {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-red-700 mx-4">✗ {error}</div>}
 
         {/* EDITOR VISUAL */}
         <div className="bg-white shadow-xl border border-slate-200 min-h-[1056px] w-full mx-auto p-10 sm:p-16 mb-8 rounded-sm">
@@ -821,7 +831,8 @@ function PrescricaoEditor() {
 
                                           <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 sm:w-20 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
                                           
-                                          <div className="flex-1 min-w-[100px] overflow-hidden">
+                                          {/* FIX OVERFLOW-HIDDEN HERE */}
+                                          <div className="flex-1 min-w-[100px] relative">
                                             <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => {
                                                 setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g' } : i) } : o) } : b))
                                               }} 
@@ -1013,7 +1024,7 @@ function PrescricaoEditor() {
       {/* =========================================================
           ÁREA DE IMPRESSÃO (Nativa do Navegador - Renderiza para o PDF e Impressora)
           ========================================================= */}
-      <div id="print-area" className="hidden print:table w-full bg-white text-black font-sans text-[11pt]">
+      <table id="print-area" className="hidden print:table w-full bg-white text-black font-sans text-[11pt]">
         <thead className="table-header-group">
           <tr>
             <td>
@@ -1037,10 +1048,10 @@ function PrescricaoEditor() {
           </tr>
         </thead>
 
-        <tbody className="table-row-group" id="print-body">
+        <tbody className="table-row-group">
           <tr>
             <td>
-              <div className="space-y-6">
+              <div className="space-y-6" id="print-body">
                 {blocos.map((bloco) => {
                   if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
                     return (
@@ -1184,7 +1195,7 @@ function PrescricaoEditor() {
             </td>
           </tr>
         </tbody>
-      </div>
+      </table>
 
       {/* RODAPÉ FIXO NA IMPRESSÃO NATIVA */}
       <div className="hidden print:flex fixed bottom-0 left-0 w-full bg-white flex-col items-center justify-center pt-2 pb-2 z-50 border-t border-slate-200">
