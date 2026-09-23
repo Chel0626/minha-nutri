@@ -1,5 +1,6 @@
 {
-  "/pacientes/page": "app/pacientes/page.js",
-  "/pacientes/[id]/page": "app/pacientes/[id]/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/prescricoes/page": "app/prescricoes/page.js",
   "/prescricoes/nova/page": "app/prescricoes/nova/page.js"
 }

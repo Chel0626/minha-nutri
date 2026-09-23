@@ -741,14 +741,35 @@ function PrescricaoEditor() {
                         <div className="mt-2">
                           {(bloco.opcoes || []).map((opcao, idx) => (
                             <div key={opcao.id} className="relative">
-                              {(bloco.opcoes || []).length > 1 ? (
-                                <div className="flex items-center justify-between mb-1 mt-4">
-                                  <span className="text-[11pt] font-bold text-[#b45309]">Opção {idx + 1}:</span>
-                                  <button type="button" onClick={() => removerOpcao(bloco.id, opcao.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
+                              
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 mt-4 group/opt">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className={(bloco.opcoes || []).length > 1 ? "text-[11pt] font-bold text-[#b45309]" : "text-[11pt] font-bold text-black"}>
+                                    {(bloco.opcoes || []).length > 1 ? `Opção ${idx + 1}:` : `Sugestão:`}
+                                  </span>
+                                  
+                                  {/* PAINEL DE MACROS ESPECÍFICO DESTA OPÇÃO */}
+                                  {(() => {
+                                    const macros = calcularTotalMacros(opcao);
+                                    if (macros.kcal === '0') return null;
+                                    return (
+                                      <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded px-2 py-0.5 text-[10px] font-mono text-slate-500 shadow-sm" title={`Macros desta opção`}>
+                                        <span>C: <span className="font-bold text-blue-600">{macros.cho}g</span></span>
+                                        <span className="text-slate-200">|</span>
+                                        <span>P: <span className="font-bold text-red-500">{macros.ptn}g</span></span>
+                                        <span className="text-slate-200">|</span>
+                                        <span>L: <span className="font-bold text-amber-500">{macros.lip}g</span></span>
+                                        <span className="text-slate-200">|</span>
+                                        <span className="font-bold text-slate-700">{macros.kcal} kcal</span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
-                              ) : (
-                                <div className="text-[11pt] font-bold text-black mb-1 mt-2">Sugestão:</div>
-                              )}
+
+                                {(bloco.opcoes || []).length > 1 && (
+                                  <button type="button" onClick={() => removerOpcao(bloco.id, opcao.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover/opt:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
+                                )}
+                              </div>
 
                               <div className="flex flex-col gap-y-1">
                                 {opcao.itens.map((item, iIndex) => {
