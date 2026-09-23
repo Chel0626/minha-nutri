@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
@@ -11,85 +12,33 @@ import BuscaAlimento from '@/components/BuscaAlimento';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
-interface ItemAlimento {
-  id: string;
-  dbId?: string;
-  nome: string;
-  quantidade: string;
-  baseMacros?: { cho: number; ptn: number; lip: number };
-  macroAtivo?: 'cho' | 'ptn' | 'lip' | null;
-  macroAlvo?: string;
-  conexao?: 'nova_linha' | 'mais' | 'ou'; 
-}
-
-interface Opcao {
-  id: string;
-  itens: ItemAlimento[];
-}
-
+interface ItemAlimento { id: string; dbId?: string; nome: string; quantidade: string; baseMacros?: { cho: number; ptn: number; lip: number }; macroAtivo?: 'cho' | 'ptn' | 'lip' | null; macroAlvo?: string; conexao?: 'nova_linha' | 'mais' | 'ou'; }
+interface Opcao { id: string; itens: ItemAlimento[]; }
 type TipoBloco = 'condutas' | 'refeicao' | 'texto_livre';
+interface Bloco { id: string; tipo: TipoBloco; nome?: string; metaCarboidratos?: string; mostrarMeta?: boolean; opcoes?: Opcao[]; titulo?: string; conteudoTexto: string; expandido?: boolean; colapsado?: boolean; }
+interface ItemTabela { id: string; dbId?: string; nome: string; baseMacro: number; macrosReal?: { cho: number; ptn: number; lip: number }; }
+interface MetadadosPrescricion { pacienteId: string; pacienteNome: string; faseCaloricas: string; dataPrescricao: string; }
 
-interface Bloco {
-  id: string;
-  tipo: TipoBloco;
-  nome?: string;
-  metaCarboidratos?: string;
-  mostrarMeta?: boolean; 
-  opcoes?: Opcao[];
-  titulo?: string;
-  conteudoTexto: string; 
-  expandido?: boolean;
-  colapsado?: boolean;
-}
+const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
-interface ItemTabela {
-  id: string;
-  dbId?: string;
-  nome: string;
-  baseMacro: number;
-  macrosReal?: { cho: number; ptn: number; lip: number };
-}
+const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
+const TABELA_ARROZ = [ { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 }, { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 }, { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 }, { nome: 'Milho-verde (enlatado)', base: 17.1 } ];
 
-interface MetadadosPrescricion {
-  pacienteId: string;
-  pacienteNome: string;
-  faseCaloricas: string; 
-  dataPrescricao: string;
-}
-
-const parseQtd = (str: string) => {
-  if (!str) return 0;
-  const match = str.match(/[\d.,]+/);
-  return match ? parseFloat(match[0].replace(',', '.')) : 0;
-};
-
-// Bases fixas
-const TABELA_PROTEINAS = [
-  { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 },
-  { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 }
-];
-const TABELA_ARROZ = [
-  { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 },
-  { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 },
-  { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 },
-  { nome: 'Milho-verde (enlatado)', base: 17.1 }
-];
+// LISTA DE FRUTAS REDUZIDA
 const TABELA_FRUTAS = [
-  { nome: 'Abacate', base: 6.0 }, { nome: 'Abacaxi', base: 12.3 }, { nome: 'Ameixa Fresca', base: 11.4 }, { nome: 'Amora', base: 9.6 },
-  { nome: 'Atemoia', base: 25.3 }, { nome: 'Banana Maçã', base: 26.0 }, { nome: 'Banana Nanica', base: 23.8 }, { nome: 'Banana Prata', base: 26.0 },
-  { nome: 'Caju', base: 10.7 }, { nome: 'Caqui', base: 19.3 }, { nome: 'Carambola', base: 6.7 }, { nome: 'Cereja Fresca', base: 16.0 },
-  { nome: 'Coco Fresco', base: 15.2 }, { nome: 'Figo Fresco', base: 19.2 }, { nome: 'Framboesa', base: 11.9 }, { nome: 'Goiaba Branca', base: 12.4 },
-  { nome: 'Goiaba Vermelha', base: 13.0 }, { nome: 'Graviola', base: 16.8 }, { nome: 'Jabuticaba', base: 15.3 }, { nome: 'Jaca', base: 22.5 },
-  { nome: 'Kiwi', base: 14.7 }, { nome: 'Laranja Lima', base: 11.5 }, { nome: 'Laranja Pêra', base: 8.9 }, { nome: 'Limão', base: 9.3 },
-  { nome: 'Maçã Fuji', base: 15.2 }, { nome: 'Maçã Gala', base: 13.8 }, { nome: 'Maçã Verde', base: 13.6 }, { nome: 'Maracujá', base: 23.4 },
-  { nome: 'Melancia', base: 6.8 }, { nome: 'Melão', base: 7.5 }, { nome: 'Mirtilo (Blueberry)', base: 14.5 }, { nome: 'Morango', base: 6.8 },
-  { nome: 'Nectarina', base: 10.5 }, { nome: 'Pera', base: 15.2 }, { nome: 'Pêssego Fresco', base: 9.5 }, { nome: 'Pitaia (Pitaya)', base: 11.8 },
-  { nome: 'Romã', base: 18.7 }, { nome: 'Tangerina / Mexerica', base: 13.3 }, { nome: 'Uva Rubi', base: 17.3 }, { nome: 'Uva Thompson', base: 18.1 }
+  { nome: 'Abacaxi', base: 12.3 }, { nome: 'Banana Prata', base: 26.0 }, { nome: 'Goiaba', base: 13.0 }, { nome: 'Laranja', base: 8.9 },
+  { nome: 'Mamão', base: 11.6 }, { nome: 'Manga', base: 15.0 }, { nome: 'Maçã', base: 15.2 }, { nome: 'Melancia', base: 6.8 },
+  { nome: 'Melão', base: 7.5 }, { nome: 'Morango', base: 6.8 }, { nome: 'Uva', base: 17.3 }
 ];
 
-export default function CriarPrescricao() {
+function PrescricaoEditor() {
   const { pacientes } = usePacientes();
   const { preConfigs } = usePreConfiguracoes();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const editId = searchParams?.get('editId');
+  const pacienteQueryId = searchParams?.get('pacienteId');
 
   const dataAtual = new Date().toLocaleDateString('pt-BR');
   const [metadados, setMetadados] = useState<MetadadosPrescricion>({ pacienteId: '', pacienteNome: '', faseCaloricas: '', dataPrescricao: dataAtual });
@@ -121,10 +70,44 @@ export default function CriarPrescricao() {
   const [isSigning, setIsSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
 
+  // EFEITO DE CARREGAMENTO (Se for Edição ou se vier Paciente pela URL)
+  useEffect(() => {
+    if (editId) {
+      carregarDietaSalva(editId);
+    } else if (pacienteQueryId && pacientes.length > 0) {
+      const paciente = pacientes.find((p) => p.id === pacienteQueryId);
+      setMetadados(prev => ({ ...prev, pacienteId: pacienteQueryId, pacienteNome: paciente?.nome_completo || '' }));
+    }
+  }, [editId, pacienteQueryId, pacientes]);
+
+  const carregarDietaSalva = async (id: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('prescricoes').select('*').eq('id', id).single();
+      if (error) throw error;
+
+      if (data && data.dados_estruturados) {
+        const d = data.dados_estruturados;
+        setBlocos(d.blocos || []);
+        setTabelasSelecionadas(d.tabelasSelecionadas || { proteinas: false, substitutosArroz: false, frutas: false });
+        setAlvosTabelas(d.alvosTabelas || { proteinas: '', substitutosArroz: '', frutas: '' });
+        setTabelaProteinas(d.tabelaProteinas || TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 } })));
+        setTabelaArroz(d.tabelaArroz || TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 } })));
+        setTabelaFrutas(d.tabelaFrutas || TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 } })));
+        if (d.metadados) setMetadados(d.metadados);
+      } else {
+        alert("Aviso: Esta é uma prescrição antiga salva apenas em modo de leitura de texto. O modo visual de edição pode não corresponder exatamente ao que estava escrito.");
+        setMetadados(prev => ({ ...prev, pacienteId: data.paciente_id }));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const configsPorCategoria = preConfigs.reduce((acc, config: PreConfiguracao) => {
-    if (!acc[config.categoria]) acc[config.categoria] = [];
-    acc[config.categoria].push(config);
-    return acc;
+    if (!acc[config.categoria]) acc[config.categoria] = []; acc[config.categoria].push(config); return acc;
   }, {} as Record<string, PreConfiguracao[]>);
 
   const handlePacienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -135,20 +118,16 @@ export default function CriarPrescricao() {
 
   const adicionarBloco = (tipo: TipoBloco) => {
     const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, conteudoTexto: '', mostrarMeta: true, colapsado: false };
-    if (tipo === 'refeicao') {
-      novoBloco.nome = ''; novoBloco.metaCarboidratos = 'até 30g de Carboidratos';
-      novoBloco.opcoes = [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha' }] }];
-    } else if (tipo === 'texto_livre') novoBloco.titulo = 'Título da Sessão';
+    if (tipo === 'refeicao') { novoBloco.nome = ''; novoBloco.metaCarboidratos = 'até 30g de Carboidratos'; novoBloco.opcoes = [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha' }] }]; }
+    else if (tipo === 'texto_livre') novoBloco.titulo = 'Título da Sessão';
     else if (tipo === 'condutas') novoBloco.expandido = false;
     setBlocos([...blocos, novoBloco]);
   };
   const removerBloco = (id: string) => setBlocos(blocos.filter(b => b.id !== id));
   const moverBloco = (index: number, direcao: 'cima' | 'baixo') => {
     if ((direcao === 'cima' && index === 0) || (direcao === 'baixo' && index === blocos.length - 1)) return;
-    const novosBlocos = [...blocos];
-    const alvo = direcao === 'cima' ? index - 1 : index + 1;
-    [novosBlocos[index], novosBlocos[alvo]] = [novosBlocos[alvo], novosBlocos[index]];
-    setBlocos(novosBlocos);
+    const novosBlocos = [...blocos]; const alvo = direcao === 'cima' ? index - 1 : index + 1;
+    [novosBlocos[index], novosBlocos[alvo]] = [novosBlocos[alvo], novosBlocos[index]]; setBlocos(novosBlocos);
   };
   const atualizarBloco = (id: string, campo: keyof Bloco, valor: any) => setBlocos(blocos.map(b => (b.id === id ? { ...b, [campo]: valor } : b)));
   
@@ -180,11 +159,7 @@ export default function CriarPrescricao() {
           const newItem = { id: `it-${Date.now()}`, quantidade: '', nome: '', conexao };
           if (insertAfterId) {
             const idx = o.itens.findIndex(i => i.id === insertAfterId);
-            if (idx >= 0) {
-              const newItens = [...o.itens];
-              newItens.splice(idx + 1, 0, newItem);
-              return { ...o, itens: newItens };
-            }
+            if (idx >= 0) { const newItens = [...o.itens]; newItens.splice(idx + 1, 0, newItem); return { ...o, itens: newItens }; }
           }
           return { ...o, itens: [...o.itens, newItem] };
         })
@@ -197,50 +172,24 @@ export default function CriarPrescricao() {
   const atualizarAlvoMacro = (blocoId: string, opcaoId: string, itemId: string, valor: string) => {
     setBlocos(blocos.map(b => {
       if (b.id !== blocoId || b.tipo !== 'refeicao') return b;
-      return {
-        ...b, opcoes: (b.opcoes || []).map(o => {
-          if (o.id !== opcaoId) return o;
-          return {
-            ...o, itens: o.itens.map(i => {
-              if (i.id !== itemId) return i;
-              let newQtd = i.quantidade;
-              if (i.macroAtivo && i.baseMacros && valor !== '') {
-                const target = parseFloat(valor); const base = i.baseMacros[i.macroAtivo];
-                if (base > 0 && !isNaN(target)) newQtd = `${Math.round(((target * 100) / base) / 5) * 5}g`;
-                else if (base === 0) newQtd = '0g';
-              }
-              return { ...i, macroAlvo: valor, quantidade: newQtd };
-            })
-          };
-        })
-      };
+      return { ...b, opcoes: (b.opcoes || []).map(o => { if (o.id !== opcaoId) return o; return { ...o, itens: o.itens.map(i => { if (i.id !== itemId) return i; let newQtd = i.quantidade; if (i.macroAtivo && i.baseMacros && valor !== '') { const target = parseFloat(valor); const base = i.baseMacros[i.macroAtivo]; if (base > 0 && !isNaN(target)) newQtd = `${Math.round(((target * 100) / base) / 5) * 5}g`; else if (base === 0) newQtd = '0g'; } return { ...i, macroAlvo: valor, quantidade: newQtd }; }) }; }) };
     }));
   };
 
   const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
   const adicionarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas') => {
     const newItem = { id: `tab-${Date.now()}`, nome: '', baseMacro: 0 };
-    if (tabela === 'proteinas') setTabelaProteinas([...tabelaProteinas, newItem]);
-    if (tabela === 'arroz') setTabelaArroz([...tabelaArroz, newItem]);
-    if (tabela === 'frutas') setTabelaFrutas([...tabelaFrutas, newItem]);
+    if (tabela === 'proteinas') setTabelaProteinas([...tabelaProteinas, newItem]); if (tabela === 'arroz') setTabelaArroz([...tabelaArroz, newItem]); if (tabela === 'frutas') setTabelaFrutas([...tabelaFrutas, newItem]);
   };
   const removerItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas', id: string) => {
-    if (tabela === 'proteinas') setTabelaProteinas(prev => prev.filter(i => i.id !== id));
-    if (tabela === 'arroz') setTabelaArroz(prev => prev.filter(i => i.id !== id));
-    if (tabela === 'frutas') setTabelaFrutas(prev => prev.filter(i => i.id !== id));
+    if (tabela === 'proteinas') setTabelaProteinas(prev => prev.filter(i => i.id !== id)); if (tabela === 'arroz') setTabelaArroz(prev => prev.filter(i => i.id !== id)); if (tabela === 'frutas') setTabelaFrutas(prev => prev.filter(i => i.id !== id));
   };
   const atualizarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas', id: string, nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string) => {
     const baseMacro = tabela === 'proteinas' ? macros.ptn : macros.cho;
     const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, nome, baseMacro, macrosReal: macros, dbId } : i);
-    if (tabela === 'proteinas') setTabelaProteinas(updateFn);
-    else if (tabela === 'arroz') setTabelaArroz(updateFn);
-    else if (tabela === 'frutas') setTabelaFrutas(updateFn);
+    if (tabela === 'proteinas') setTabelaProteinas(updateFn); else if (tabela === 'arroz') setTabelaArroz(updateFn); else if (tabela === 'frutas') setTabelaFrutas(updateFn);
   };
-  const calcularPesoEquivalente = (alvo: string, baseMacro: number) => {
-    const alvoNum = parseFloat(alvo);
-    if (isNaN(alvoNum) || baseMacro === 0) return '--';
-    return `${Math.round(((alvoNum * 100) / baseMacro) / 5) * 5}g`;
-  };
+  const calcularPesoEquivalente = (alvo: string, baseMacro: number) => { const alvoNum = parseFloat(alvo); if (isNaN(alvoNum) || baseMacro === 0) return '--'; return `${Math.round(((alvoNum * 100) / baseMacro) / 5) * 5}g`; };
 
   const handleAtualizarAlimento = async () => {
     if (!modalEdicao.nome.trim()) { alert("O nome do alimento não pode estar vazio."); return; }
@@ -250,8 +199,7 @@ export default function CriarPrescricao() {
       if (modalEdicao.id) await supabase.from('alimentos').update(dadosSalvar).eq('id', modalEdicao.id);
       else await supabase.from('alimentos').insert([{ id: `custom_${Date.now()}`, ...dadosSalvar }]);
       setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '' });
-    } catch (err) { alert("Erro ao salvar o alimento."); } 
-    finally { setSalvandoAlimento(false); }
+    } catch (err) { alert("Erro ao salvar o alimento."); } finally { setSalvandoAlimento(false); }
   };
 
   const gerarTextoPrescricao = () => {
@@ -264,7 +212,6 @@ export default function CriarPrescricao() {
       } else if (bloco.tipo === 'refeicao') {
         txt += `${(bloco.nome || '').toUpperCase()}\n`;
         if (bloco.mostrarMeta && bloco.metaCarboidratos) txt += `META para INSULINA: ${bloco.metaCarboidratos}\n`;
-        
         const temOpcoesPreenchidas = (bloco.opcoes || []).some(o => o.itens.some(i => i.nome || i.quantidade));
         
         if (temOpcoesPreenchidas || bloco.conteudoTexto?.trim()) {
@@ -272,24 +219,15 @@ export default function CriarPrescricao() {
             (bloco.opcoes || []).forEach((opcao, idx) => {
               const temItens = opcao.itens.some(i => i.nome.trim() || i.quantidade.trim());
               if (!temItens) return;
-
               txt += (bloco.opcoes!.length > 1) ? `\nOpção ${idx + 1}:\n` : `\nSugestão:\n`;
-              
               let isPrimeiroItemDaLinha = true;
               opcao.itens.forEach((item, iIndex) => {
                 if (!item.nome.trim() && !item.quantidade.trim()) return;
                 const isNovaLinha = iIndex === 0 || item.conexao === 'nova_linha' || !item.conexao;
                 const val = `${item.quantidade.trim() ? item.quantidade.trim() + ' ' : ''}${item.nome.trim()}`;
                 
-                if (isNovaLinha) {
-                  if (!isPrimeiroItemDaLinha) txt += '\n+ ';
-                  else txt += ''; 
-                  txt += val;
-                  isPrimeiroItemDaLinha = false;
-                } else {
-                  const con = item.conexao === 'ou' ? ' OU ' : ' + ';
-                  txt += `${con}${val}`;
-                }
+                if (isNovaLinha) { if (!isPrimeiroItemDaLinha) txt += '\n+ '; else txt += ''; txt += val; isPrimeiroItemDaLinha = false; } 
+                else { const con = item.conexao === 'ou' ? ' OU ' : ' + '; txt += `${con}${val}`; }
               });
               txt += `\n`;
             });
@@ -300,21 +238,9 @@ export default function CriarPrescricao() {
       }
     });
 
-    if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) {
-      txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`;
-      tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro)}\n`; });
-      txt += `\n`;
-    }
-    if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) {
-      txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`;
-      tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro)}\n`; });
-      txt += `\n`;
-    }
-    if (tabelasSelecionadas.frutas && alvosTabelas.frutas) {
-      txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`;
-      tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro)}\n`; });
-      txt += `\n`;
-    }
+    if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) { txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`; tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro)}\n`; }); txt += `\n`; }
+    if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) { txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`; tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro)}\n`; }); txt += `\n`; }
+    if (tabelasSelecionadas.frutas && alvosTabelas.frutas) { txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`; tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro)}\n`; }); txt += `\n`; }
     return txt;
   };
 
@@ -325,35 +251,39 @@ export default function CriarPrescricao() {
 
     try {
       setLoading(true);
-      const { error: insertError } = await supabase.from('prescricoes').insert([{
+      
+      const payload = {
         paciente_id: metadados.pacienteId,
         cardapio_texto: gerarTextoPrescricao(),
         orientacoes_selecionadas: [],
-      }]);
+        dados_estruturados: {
+          blocos,
+          tabelasSelecionadas,
+          alvosTabelas,
+          tabelaProteinas,
+          tabelaArroz,
+          tabelaFrutas,
+          metadados
+        }
+      };
 
-      if (insertError) throw insertError;
+      if (editId) {
+        const { error: updateError } = await supabase.from('prescricoes').update(payload).eq('id', editId);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase.from('prescricoes').insert([payload]);
+        if (insertError) throw insertError;
+      }
+
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) { setError(err instanceof Error ? err.message : 'Erro ao salvar prescrição'); } 
     finally { setLoading(false); }
   };
 
-  const convertFileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve((reader.result as string).split(',')[1]); 
-      reader.onerror = error => reject(error);
-    });
-  };
-  const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    return window.btoa(binary);
-  };
-
-  // Carrega a logo para injetar direto no jsPDF
+  const convertFileToBase64 = (file: File): Promise<string> => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve((reader.result as string).split(',')[1]); reader.onerror = error => reject(error); }); };
+  const arrayBufferToBase64 = (buffer: ArrayBuffer) => { let binary = ''; const bytes = new Uint8Array(buffer); for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]); return window.btoa(binary); };
+  
   const getLogoBase64 = async (): Promise<string | null> => {
     try {
       const response = await fetch('/logo.jpg');
@@ -364,9 +294,7 @@ export default function CriarPrescricao() {
         reader.onloadend = () => resolve(reader.result as string);
         reader.readAsDataURL(blob);
       });
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   };
 
   const handleAssinar = async () => {
@@ -387,7 +315,7 @@ export default function CriarPrescricao() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       
-      const topMargin = 55; // Aumentei o topo para dar espaço pra logo
+      const topMargin = 55; 
       const bottomMargin = 25;
       const availableHeight = pageHeight - topMargin - bottomMargin;
       
@@ -407,7 +335,6 @@ export default function CriarPrescricao() {
         pdf.rect(0, 0, pdfWidth, topMargin, 'F');
         pdf.rect(0, pageHeight - bottomMargin, pdfWidth, bottomMargin, 'F');
 
-        // SÓ IMPRIME O CABEÇALHO NA PRIMEIRA PÁGINA
         if (page === 1) {
           if (logoData) {
             pdf.addImage(logoData, 'JPEG', pdfWidth - 48, 12, 36, 36);
@@ -426,11 +353,19 @@ export default function CriarPrescricao() {
           pdf.setDrawColor(0, 0, 0);
           pdf.setLineWidth(0.3);
           pdf.setLineDashPattern([1, 1], 0);
-          pdf.line(12, 42, pdfWidth - 12, 42); // Linha passa debaixo da logo
+          pdf.line(12, 42, pdfWidth - 12, 42); 
           pdf.setLineDashPattern([], 0); 
+
+          pdf.setFont("helvetica", "normal");
+          pdf.setTextColor(30, 58, 138); 
+          pdf.setFontSize(11);
+          pdf.text("Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909", 12, 48);
+          pdf.setTextColor(0, 102, 204);
+          pdf.text("www.carolinaminhanutri.com", 12, 53);
+          pdf.setTextColor(30, 58, 138); 
+          pdf.text(`Data: ${metadados.dataPrescricao}`, 12, 58);
         }
 
-        // RODAPÉ: Imprime em todas as páginas
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(0, 0, 0);
         pdf.setFontSize(9);
@@ -442,12 +377,16 @@ export default function CriarPrescricao() {
         pdf.text(txt2, pdfWidth / 2, pageHeight - 10, { align: "center" });
       };
 
+      // Se não for a página 1, precisamos subir o texto para não ter o buraco gigante do cabeçalho
       pdf.addImage(imgData, 'JPEG', 12, position, imgWidth, imgHeight);
       drawHeaderFooter(1);
       heightLeft -= availableHeight;
 
       while (heightLeft > 0) {
         position = heightLeft - imgHeight + topMargin; 
+        
+        // Na página 2 pra frente, se o topMargin for menor pra não desperdiçar papel, podemos ajustar,
+        // mas isso desalinharia o split da imagem. Mantendo a máscara uniforme.
         pdf.addPage();
         currentPage++;
         
@@ -498,7 +437,7 @@ export default function CriarPrescricao() {
       {/* HEADER DE NAVEGAÇÃO */}
       <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/pacientes" className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
+          <Link href={`/pacientes/${metadados.pacienteId || ''}`} className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
             ← Voltar
           </Link>
           <div className="flex items-center gap-3">
@@ -509,19 +448,20 @@ export default function CriarPrescricao() {
               <FileSignature className="w-4 h-4" /> Assinar PDF
             </button>
             <button onClick={handleSalvarPrescricao} disabled={loading} className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:bg-slate-400 transition text-sm shadow-sm">
-              {loading ? 'Salvando...' : 'Salvar Dieta'}
+              {loading ? 'Salvando...' : (editId ? 'Atualizar Dieta' : 'Salvar Dieta')}
             </button>
           </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto mt-8 print:hidden">
-        {success && <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 text-green-700 mx-4"><Check className="w-5 h-5" /> Prescrição salva!</div>}
+        {success && <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 text-green-700 mx-4"><Check className="w-5 h-5" /> Prescrição salva com sucesso!</div>}
         {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-red-700 mx-4">✗ {error}</div>}
 
         {/* EDITOR VISUAL */}
         <div className="bg-white shadow-xl border border-slate-200 min-h-[1056px] w-full mx-auto p-10 sm:p-16 mb-8 rounded-sm">
           
+          {/* CABEÇALHO VISUAL */}
           <div className="mb-10 text-slate-800">
             <div className="flex justify-between items-end mb-4">
               <div>
@@ -534,12 +474,10 @@ export default function CriarPrescricao() {
                   </select>
                 </div>
               </div>
-              {/* LOGO (Deve existir em /public/logo.jpg) */}
               <img src="/logo.jpg" alt="Logo Carolina Macedo" className="w-36 h-36 object-contain" />
             </div>
             
-            {/* A linha passa de ponta a ponta, DEPOIS da Logo */}
-            <hr className="border-t border-dashed border-slate-400 my-4 w-full" />
+            <hr className="border-t border-dashed border-black my-4 w-full" />
             
             <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
             <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
@@ -550,6 +488,7 @@ export default function CriarPrescricao() {
             <h2 className="text-[13pt] font-bold underline mt-8 mb-6 text-black">Distribuição dos carboidratos por refeição:</h2>
           </div>
 
+          {/* CORPO DE EDIÇÃO */}
           <div className="space-y-4">
             {blocos.map((bloco, index) => (
               <div key={bloco.id} className="relative group border border-transparent hover:border-slate-100 rounded-lg p-2 md:p-4 -mx-2 md:-mx-4 transition-colors">
@@ -580,6 +519,7 @@ export default function CriarPrescricao() {
 
                 {!bloco.colapsado && (
                   <>
+                    {/* --- TIPO: REFEIÇÃO --- */}
                     {bloco.tipo === 'refeicao' && (
                       <div className="flex flex-col gap-1.5">
                         <input type="text" value={bloco.nome} onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} placeholder="Título da Refeição (Ex: Café da Manhã)" className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 w-full bg-transparent" />
@@ -819,178 +759,166 @@ export default function CriarPrescricao() {
       </div>
 
       {/* =========================================================
-          ÁREA DE IMPRESSÃO (Nativa do Navegador - Renderiza para o PDF e Impressora)
+          ÁREA DE IMPRESSÃO NATIVA (Ctrl+P do Navegador)
           ========================================================= */}
-      <div id="print-area" className="hidden print:table w-full bg-white text-black font-sans text-[11pt]">
+      <div id="print-area" className="hidden print:block w-full bg-white text-black font-sans text-[11pt] pb-32">
         
-        {/* THEAD repete APENAS no topo do documento por padrão em tabelas sem borders,
-            se quebrar no navegador, a regra CSS trata. */}
-        <thead className="table-header-group">
-          <tr>
-            <td>
-              <div className="relative mb-6 pb-4 pt-4">
-                <div className="flex justify-between items-end mb-4">
-                  <div>
-                    <p className="text-[14pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</p>
-                    <p className="text-[14pt] text-[#1e3a8a] mt-1">Paciente: <span className="font-bold">{metadados.pacienteNome || '___________________'}</span></p>
-                  </div>
-                  <img src="/logo.jpg" alt="Logo" className="w-36 h-36 object-contain" />
+        {/* CABEÇALHO (Apenas topo da página 1) */}
+        <div className="mb-8">
+          <div className="flex justify-between items-end mb-4">
+            <div>
+              <p className="text-[14pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</p>
+              <p className="text-[14pt] text-[#1e3a8a] mt-1">Paciente: <span className="font-bold">{metadados.pacienteNome || '___________________'}</span></p>
+            </div>
+            <img src="/logo.jpg" alt="Logo" className="w-36 h-36 object-contain" />
+          </div>
+
+          <hr className="border-t border-dashed border-black my-4 w-full" />
+          
+          <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
+          <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
+          <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
+          <p className="text-[12pt] font-bold underline mt-6 mb-2">Distribuição dos carboidratos por refeição:</p>
+        </div>
+
+        {/* CORPO DO DOCUMENTO */}
+        <div className="space-y-6" id="print-body">
+          {blocos.map((bloco) => {
+            if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
+              return (
+                <div key={bloco.id} className="break-inside-avoid">
+                  <p className="font-bold text-[12pt] text-[#b45309] mb-1">Orientações Gerais</p>
+                  <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
                 </div>
-                
-                <hr className="border-t border-dashed border-black my-4 w-full" />
-                
-                <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
-                <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
-                <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
-                <p className="text-[12pt] font-bold underline mt-6 mb-2">Distribuição dos carboidratos por refeição:</p>
-              </div>
-            </td>
-          </tr>
-        </thead>
+              );
+            }
 
-        <tbody className="table-row-group" id="print-body">
-          <tr>
-            <td>
-              <div className="space-y-6">
-                {blocos.map((bloco) => {
-                  if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
+            if (bloco.tipo === 'texto_livre' && (bloco.titulo || bloco.conteudoTexto?.trim())) {
+              return (
+                <div key={bloco.id} className="break-inside-avoid">
+                  {bloco.titulo && <p className="font-bold text-[12pt] text-[#b45309] mb-1">{bloco.titulo}</p>}
+                  <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
+                </div>
+              );
+            }
+
+            if (bloco.tipo === 'refeicao') {
+              const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade));
+              if (!temOpcoes && !bloco.conteudoTexto?.trim()) return null;
+
+              return (
+                <div key={bloco.id} className="break-inside-avoid mb-6">
+                  {bloco.nome && <p className="font-bold text-[12pt] text-black">{bloco.nome}</p>}
+                  
+                  {bloco.mostrarMeta && bloco.metaCarboidratos && (
+                    <p className="text-[11pt] font-semibold text-[#0066cc]">META para INSULINA: {bloco.metaCarboidratos}</p>
+                  )}
+                  
+                  {(bloco.opcoes || []).map((opcao, idx) => {
+                    const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade);
+                    if (!temItemPreenchido) return null;
+
+                    const linhasPdf: ItemAlimento[][] = [];
+                    let curLinhaPdf: ItemAlimento[] = [];
+                    opcao.itens.forEach((item, i) => {
+                      if (i === 0 || item.conexao === 'nova_linha' || !item.conexao) {
+                        if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
+                        curLinhaPdf = [item];
+                      } else curLinhaPdf.push(item);
+                    });
+                    if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
+
                     return (
-                      <div key={bloco.id} className="break-inside-avoid">
-                        <p className="font-bold text-[12pt] text-[#b45309] mb-1">Orientações Gerais</p>
-                        <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
-                      </div>
-                    );
-                  }
-
-                  if (bloco.tipo === 'texto_livre' && (bloco.titulo || bloco.conteudoTexto?.trim())) {
-                    return (
-                      <div key={bloco.id} className="break-inside-avoid">
-                        {bloco.titulo && <p className="font-bold text-[12pt] text-[#b45309] mb-1">{bloco.titulo}</p>}
-                        <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
-                      </div>
-                    );
-                  }
-
-                  if (bloco.tipo === 'refeicao') {
-                    const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade));
-                    if (!temOpcoes && !bloco.conteudoTexto?.trim()) return null;
-
-                    return (
-                      <div key={bloco.id} className="break-inside-avoid mb-6">
-                        {bloco.nome && <p className="font-bold text-[12pt] text-black">{bloco.nome}</p>}
-                        
-                        {bloco.mostrarMeta && bloco.metaCarboidratos && (
-                          <p className="text-[11pt] font-semibold text-[#0066cc]">META para INSULINA: {bloco.metaCarboidratos}</p>
+                      <div key={opcao.id} className="mt-2">
+                        {bloco.opcoes!.length > 1 ? (
+                          <p className="font-bold text-[#b45309] text-[11pt] mb-1">Opção {idx + 1}:</p>
+                        ) : (
+                          <p className="font-bold text-black text-[11pt] mb-1">Sugestão:</p>
                         )}
-                        
-                        {(bloco.opcoes || []).map((opcao, idx) => {
-                          const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade);
-                          if (!temItemPreenchido) return null;
-
-                          const linhasPdf: ItemAlimento[][] = [];
-                          let curLinhaPdf: ItemAlimento[] = [];
-                          opcao.itens.forEach((item, i) => {
-                            if (i === 0 || item.conexao === 'nova_linha' || !item.conexao) {
-                              if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
-                              curLinhaPdf = [item];
-                            } else curLinhaPdf.push(item);
-                          });
-                          if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
-
-                          return (
-                            <div key={opcao.id} className="mt-2">
-                              {bloco.opcoes!.length > 1 ? (
-                                <p className="font-bold text-[#b45309] text-[11pt] mb-1">Opção {idx + 1}:</p>
-                              ) : (
-                                <p className="font-bold text-black text-[11pt] mb-1">Sugestão:</p>
-                              )}
-                              <div className="text-[11pt] text-black leading-relaxed">
-                                {linhasPdf.map((linha, lIdx) => (
-                                  <div key={lIdx} className="mb-1">
-                                    {lIdx > 0 ? '+ ' : ''}
-                                    {linha.map((item, iIdx) => {
-                                        const qtd = item.quantidade ? <span className="font-semibold">{item.quantidade} </span> : null;
-                                        const con = iIdx > 0 ? (item.conexao === 'ou' ? ' OU ' : ' + ') : '';
-                                        return (
-                                          <span key={item.id}>
-                                            {iIdx > 0 && <span className="font-bold mx-1">{con}</span>}
-                                            {qtd}{item.nome}
-                                          </span>
-                                        );
-                                    })}
-                                  </div>
-                                ))}
-                              </div>
+                        <div className="text-[11pt] text-black leading-relaxed">
+                          {linhasPdf.map((linha, lIdx) => (
+                            <div key={lIdx} className="mb-1">
+                              {lIdx > 0 ? '+ ' : ''}
+                              {linha.map((item, iIdx) => {
+                                  const qtd = item.quantidade ? <span className="font-semibold">{item.quantidade} </span> : null;
+                                  const con = iIdx > 0 ? (item.conexao === 'ou' ? ' OU ' : ' + ') : '';
+                                  return (
+                                    <span key={item.id}>
+                                      {iIdx > 0 && <span className="font-bold mx-1">{con}</span>}
+                                      {qtd}{item.nome}
+                                    </span>
+                                  );
+                              })}
                             </div>
-                          );
-                        })}
-
-                        {bloco.conteudoTexto?.trim() && (
-                          <div className="mt-2 text-[11pt] whitespace-pre-line text-black leading-relaxed">
-                            {bloco.conteudoTexto}
-                          </div>
-                        )}
+                          ))}
+                        </div>
                       </div>
                     );
-                  }
-                  return null;
-                })}
-              </div>
+                  })}
 
-              {/* TABELAS DE EQUIVALENTES (Impressão) */}
-              {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.frutas) && (
-                <div className="mt-10 break-before-auto">
-                  {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
-                    <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
-                      <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade / Peso</th></tr></thead>
-                        <tbody>
-                          {tabelaProteinas.map((item, idx) => item.nome ? (
-                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}</td></tr>
-                          ) : null)}
-                          <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 italic">Ajustar (1 ovo = ~6g ptn)</td></tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
-                    <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade Equivalente</th></tr></thead>
-                        <tbody>
-                          {tabelaArroz.map((item, idx) => item.nome ? (
-                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}</td></tr>
-                          ) : null)}
-                        </tbody>
-                      </table>
-                      <p className="text-[10pt] mt-1 font-bold text-gray-800">Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)</p>
-                    </div>
-                  )}
-
-                  {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
-                    <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Peso / Quantidade</th></tr></thead>
-                        <tbody>
-                          {tabelaFrutas.map((item, idx) => item.nome ? (
-                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}</td></tr>
-                          ) : null)}
-                        </tbody>
-                      </table>
+                  {bloco.conteudoTexto?.trim() && (
+                    <div className="mt-2 text-[11pt] whitespace-pre-line text-black leading-relaxed">
+                      {bloco.conteudoTexto}
                     </div>
                   )}
                 </div>
-              )}
-            </td>
-          </tr>
-        </tbody>
+              );
+            }
+            return null;
+          })}
+        </div>
+
+        {/* TABELAS DE EQUIVALENTES (Impressão) */}
+        {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.frutas) && (
+          <div className="mt-10 break-before-auto">
+            {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
+              <div className="mb-8 break-inside-avoid">
+                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
+                <table className="w-full border-collapse border border-black text-[10.5pt]">
+                  <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade / Peso</th></tr></thead>
+                  <tbody>
+                    {tabelaProteinas.map((item, idx) => item.nome ? (
+                      <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro)}</td></tr>
+                    ) : null)}
+                    <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 italic">Ajustar (1 ovo = ~6g ptn)</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
+              <div className="mb-8 break-inside-avoid">
+                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
+                <table className="w-full border-collapse border border-black text-[10.5pt]">
+                  <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade Equivalente</th></tr></thead>
+                  <tbody>
+                    {tabelaArroz.map((item, idx) => item.nome ? (
+                      <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro)}</td></tr>
+                    ) : null)}
+                  </tbody>
+                </table>
+                <p className="text-[10pt] mt-1 font-bold text-gray-800">Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)</p>
+              </div>
+            )}
+
+            {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
+              <div className="mb-8 break-inside-avoid">
+                <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
+                <table className="w-full border-collapse border border-black text-[10.5pt]">
+                  <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Peso / Quantidade</th></tr></thead>
+                  <tbody>
+                    {tabelaFrutas.map((item, idx) => item.nome ? (
+                      <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro)}</td></tr>
+                    ) : null)}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* RODAPÉ FIXO (Para impressão nativa do navegador) */}
+      {/* RODAPÉ DE IMPRESSÃO NATIVO FIXO */}
       <div className="hidden print:flex fixed bottom-0 left-0 w-full bg-white flex-col items-center justify-center pt-2 pb-2 z-50 border-t border-slate-200">
         <p className="text-[10pt] text-black">Carolina de Souza Silva Macedo - Nutricionista e Educadora em Diabetes - CRN 29096</p>
         <div className="flex items-center gap-4 mt-1 text-[10pt] text-[#0066cc]">
@@ -1044,7 +972,14 @@ export default function CriarPrescricao() {
           </div>
         </div>
       )}
-
     </div>
+  );
+}
+
+export default function CriarPrescricaoPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-500">Carregando editor...</div>}>
+      <PrescricaoEditor />
+    </Suspense>
   );
 }

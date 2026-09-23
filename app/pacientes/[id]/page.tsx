@@ -266,10 +266,10 @@ export default function DetalhesPaciente() {
 
                     <div className="flex items-center gap-3 mt-4 md:mt-0">
                       <Link 
-                        href={`/prescricoes/${presc.id}`} 
+                        href={`/prescricoes/nova?editId=${presc.id}`} 
                         className="px-5 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg hover:bg-emerald-100 transition-colors"
                       >
-                        Visualizar Dieta
+                        Editar / Imprimir
                       </Link>
                       <button 
                         onClick={() => handleExcluirPrescricao(presc.id)}
