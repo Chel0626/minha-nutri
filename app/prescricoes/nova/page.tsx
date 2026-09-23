@@ -6,13 +6,24 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
-import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe, Wand2 } from 'lucide-react';
 import BuscaAlimento from '@/components/BuscaAlimento';
 
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
-interface ItemAlimento { id: string; dbId?: string; nome: string; quantidade: string; baseMacros?: { cho: number; ptn: number; lip: number }; macroAtivo?: 'cho' | 'ptn' | 'lip' | null; macroAlvo?: string; conexao?: 'nova_linha' | 'mais' | 'ou'; porcao_padrao?: string; }
+interface ItemAlimento { 
+  id: string; 
+  dbId?: string; 
+  nome: string; 
+  quantidade: string; 
+  medida_caseira?: string; 
+  baseMacros?: { cho: number; ptn: number; lip: number }; 
+  macroAtivo?: 'cho' | 'ptn' | 'lip' | null; 
+  macroAlvo?: string; 
+  conexao?: 'nova_linha' | 'mais' | 'ou'; 
+  porcao_padrao?: string; 
+}
 interface Opcao { id: string; itens: ItemAlimento[]; }
 type TipoBloco = 'condutas' | 'refeicao' | 'texto_livre';
 interface Bloco { id: string; tipo: TipoBloco; nome?: string; metaCarboidratos?: string; mostrarMeta?: boolean; opcoes?: Opcao[]; titulo?: string; conteudoTexto: string; expandido?: boolean; colapsado?: boolean; }
@@ -21,7 +32,7 @@ interface MetadadosPrescricion { pacienteId: string; pacienteNome: string; faseC
 
 const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
-// ----- COLE ESTE BLOCO AQUI -----
+// --- CALCULADORA DE MACROS TOTAIS ---
 const calcularTotalMacros = (opcao?: Opcao) => {
   let total = { cho: 0, ptn: 0, lip: 0, kcal: 0 };
   if (!opcao || !opcao.itens) return { cho: '0.0', ptn: '0.0', lip: '0.0', kcal: '0' };
@@ -42,14 +53,44 @@ const calcularTotalMacros = (opcao?: Opcao) => {
   });
   total.kcal = (total.cho * 4) + (total.ptn * 4) + (total.lip * 9);
   
-  return {
-    cho: total.cho.toFixed(1),
-    ptn: total.ptn.toFixed(1),
-    lip: total.lip.toFixed(1),
-    kcal: Math.round(total.kcal).toString()
-  };
+  return { cho: total.cho.toFixed(1), ptn: total.ptn.toFixed(1), lip: total.lip.toFixed(1), kcal: Math.round(total.kcal).toString() };
 };
-// ---------------------------------
+
+// --- CALCULADORA INTELIGENTE DE MEDIDAS CASEIRAS ---
+const getSugestoesMedida = (qtdStr: string) => {
+  const qtd = parseQtd(qtdStr);
+  if (qtd <= 0) return [];
+  const bases = [
+    { sing: 'colher de café', plur: 'colheres de café', base: 2.5 },
+    { sing: 'colher de chá', plur: 'colheres de chá', base: 5 },
+    { sing: 'colher de sobremesa', plur: 'colheres de sobremesa', base: 10 },
+    { sing: 'colher de sopa', plur: 'colheres de sopa', base: 15 },
+    { sing: 'colher de servir', plur: 'colheres de servir', base: 30 },
+    { sing: 'escumadeira', plur: 'escumadeiras', base: 30 },
+    { sing: 'concha média', plur: 'conchas médias', base: 100 },
+    { sing: 'xícara de chá', plur: 'xícaras de chá', base: 150 },
+    { sing: 'fatia média', plur: 'fatias médias', base: 30 },
+    { sing: 'unidade pequena', plur: 'unidades pequenas', base: 50 },
+    { sing: 'unidade média', plur: 'unidades médias', base: 100 },
+    { sing: 'copo', plur: 'copos', base: 200 }
+  ];
+
+  return bases.map(b => {
+     let calc = qtd / b.base;
+     calc = Math.round(calc * 2) / 2; 
+     if (calc <= 0) return null;
+     
+     let textoQtd = calc.toString();
+     if (calc === 0.5) textoQtd = '1/2';
+     else if (calc === 1.5) textoQtd = '1 e 1/2';
+     else if (calc === 2.5) textoQtd = '2 e 1/2';
+     else if (calc === 3.5) textoQtd = '3 e 1/2';
+     else if (calc === 4.5) textoQtd = '4 e 1/2';
+
+     const nomeMedida = calc <= 1 ? b.sing : b.plur;
+     return { texto: `${textoQtd} ${nomeMedida}`, base: b.base };
+  }).filter(Boolean) as { texto: string, base: number }[];
+};
 
 const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
 const TABELA_ARROZ = [ { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 }, { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 }, { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 }, { nome: 'Milho-verde (enlatado)', base: 17.1 } ];
@@ -70,7 +111,7 @@ function PrescricaoEditor() {
 
   const [blocos, setBlocos] = useState<Bloco[]>([{
     id: `ref-${Date.now()}`, tipo: 'refeicao', nome: 'Café da Manhã', metaCarboidratos: 'até 30g de Carboidratos', mostrarMeta: true, colapsado: false,
-    conteudoTexto: '', opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha', porcao_padrao: '100g' }] }]
+    conteudoTexto: '', opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', medida_caseira: '', nome: '', conexao: 'nova_linha', porcao_padrao: '100g' }] }]
   }]);
 
   const [tabelasSelecionadas, setTabelasSelecionadas] = useState({ proteinas: false, substitutosArroz: false, frutas: false });
@@ -84,7 +125,7 @@ function PrescricaoEditor() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Modal de edição agora tem a porção
+  const [medidaDropdownAberto, setMedidaDropdownAberto] = useState<string | null>(null);
   const [modalEdicao, setModalEdicao] = useState({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g' });
   const [salvandoAlimento, setSalvandoAlimento] = useState(false);
   const caloriasCalculadas = (parseFloat(modalEdicao.cho) || 0) * 4 + (parseFloat(modalEdicao.ptn) || 0) * 4 + (parseFloat(modalEdicao.lip) || 0) * 9;
@@ -138,7 +179,7 @@ function PrescricaoEditor() {
 
   const adicionarBloco = (tipo: TipoBloco) => {
     const novoBloco: Bloco = { id: `${tipo}-${Date.now()}`, tipo, conteudoTexto: '', mostrarMeta: true, colapsado: false };
-    if (tipo === 'refeicao') { novoBloco.nome = ''; novoBloco.metaCarboidratos = 'até 30g de Carboidratos'; novoBloco.opcoes = [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha', porcao_padrao: '100g' }] }]; }
+    if (tipo === 'refeicao') { novoBloco.nome = ''; novoBloco.metaCarboidratos = 'até 30g de Carboidratos'; novoBloco.opcoes = [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', medida_caseira: '', nome: '', conexao: 'nova_linha', porcao_padrao: '100g' }] }]; }
     else if (tipo === 'texto_livre') novoBloco.titulo = 'Título da Sessão';
     else if (tipo === 'condutas') novoBloco.expandido = false;
     setBlocos([...blocos, novoBloco]);
@@ -167,7 +208,7 @@ function PrescricaoEditor() {
     atualizarBloco(blocoId, 'conteudoTexto', e.target.value);
   };
 
-  const adicionarOpcao = (blocoId: string) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: [...(b.opcoes || []), { id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', nome: '', conexao: 'nova_linha', porcao_padrao: '100g' }] }] } : b));
+  const adicionarOpcao = (blocoId: string) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: [...(b.opcoes || []), { id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', medida_caseira: '', nome: '', conexao: 'nova_linha', porcao_padrao: '100g' }] }] } : b));
   const removerOpcao = (blocoId: string, opcaoId: string) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).filter(o => o.id !== opcaoId) } : b));
 
   const adicionarItem = (blocoId: string, opcaoId: string, conexao: 'nova_linha' | 'mais' | 'ou' = 'nova_linha', insertAfterId?: string) => {
@@ -176,7 +217,7 @@ function PrescricaoEditor() {
       return {
         ...b, opcoes: (b.opcoes || []).map(o => {
           if (o.id !== opcaoId) return o;
-          const newItem = { id: `it-${Date.now()}`, quantidade: '', nome: '', conexao, porcao_padrao: '100g' };
+          const newItem = { id: `it-${Date.now()}`, quantidade: '', medida_caseira: '', nome: '', conexao, porcao_padrao: '100g' };
           if (insertAfterId) {
             const idx = o.itens.findIndex(i => i.id === insertAfterId);
             if (idx >= 0) { const newItens = [...o.itens]; newItens.splice(idx + 1, 0, newItem); return { ...o, itens: newItens }; }
@@ -190,7 +231,6 @@ function PrescricaoEditor() {
   const atualizarItem = (blocoId: string, opcaoId: string, itemId: string, campo: keyof ItemAlimento, valor: any) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).map(o => o.id === opcaoId ? { ...o, itens: o.itens.map(i => i.id === itemId ? { ...i, [campo]: valor } : i) } : o) } : b));
   const toggleMacroAtivo = (blocoId: string, opcaoId: string, itemId: string, macro: 'cho' | 'ptn' | 'lip' | null) => setBlocos(blocos.map(b => b.id === blocoId && b.tipo === 'refeicao' ? { ...b, opcoes: (b.opcoes || []).map(o => o.id === opcaoId ? { ...o, itens: o.itens.map(i => i.id === itemId ? { ...i, macroAtivo: macro, macroAlvo: '' } : i) } : o) } : b));
   
-  // CALCULADORA INTELIGENTE (Detecta g, ml, unidades)
   const atualizarAlvoMacro = (blocoId: string, opcaoId: string, itemId: string, valor: string) => {
     setBlocos(blocos.map(b => {
       if (b.id !== blocoId || b.tipo !== 'refeicao') return b;
@@ -204,28 +244,19 @@ function PrescricaoEditor() {
             const target = parseFloat(valor); 
             const base = i.baseMacros[i.macroAtivo]; 
             if (base > 0 && !isNaN(target)) { 
-              let baseNum = 100;
-              let baseUnit = 'g';
+              let baseNum = 100; let baseUnit = 'g';
               const porc = i.porcao_padrao || '100g';
-              
-              const matchNum = porc.match(/[\d.,]+/);
-              const matchUnit = porc.match(/[a-zA-ZçÇãõáéíóú]+/i);
+              const matchNum = porc.match(/[\d.,]+/); const matchUnit = porc.match(/[a-zA-ZçÇãõáéíóú]+/i);
               
               if (matchNum) baseNum = parseFloat(matchNum[0].replace(',', '.'));
               if (matchUnit) baseUnit = matchUnit[0].toLowerCase();
 
               let val = (target * baseNum) / base;
 
-              // Arredondamentos inteligentes dependendo do tipo da unidade
-              if (baseUnit.startsWith('uni') || baseUnit.startsWith('u') || baseUnit.startsWith('fati')) {
-                val = Math.round(val * 2) / 2; // Passos de 0.5 (Ex: 1.5 unidades)
-              } else if (baseUnit === 'ml') {
-                val = Math.round(val / 5) * 5; // Passos de 5 ml
-              } else {
-                val = Math.round(val / 5) * 5; // Passos de 5 g
-              }
-
-              // Deixa a exibição bonita
+              if (baseUnit.startsWith('uni') || baseUnit.startsWith('u') || baseUnit.startsWith('fati')) val = Math.round(val * 2) / 2;
+              else if (baseUnit === 'ml') val = Math.round(val / 5) * 5;
+              else val = Math.round(val / 5) * 5;
+              
               newQtd = `${val}${baseUnit === 'g' || baseUnit === 'ml' ? baseUnit : ' ' + baseUnit}`;
             } else if (base === 0) {
               newQtd = '0';
@@ -251,31 +282,19 @@ function PrescricaoEditor() {
     if (tabela === 'proteinas') setTabelaProteinas(updateFn); else if (tabela === 'arroz') setTabelaArroz(updateFn); else if (tabela === 'frutas') setTabelaFrutas(updateFn);
   };
   
-  // CALCULADORA DAS TABELAS
   const calcularPesoEquivalente = (alvo: string, baseMacro: number, porcaoPadrao: string = '100g') => { 
     const alvoNum = parseFloat(alvo); 
     if (isNaN(alvoNum) || baseMacro === 0) return '--'; 
-    
-    let baseNum = 100;
-    let baseUnit = 'g';
-    const matchNum = porcaoPadrao.match(/[\d.,]+/);
-    const matchUnit = porcaoPadrao.match(/[a-zA-ZçÇãõáéíóú]+/i);
-    
+    let baseNum = 100; let baseUnit = 'g';
+    const matchNum = porcaoPadrao.match(/[\d.,]+/); const matchUnit = porcaoPadrao.match(/[a-zA-ZçÇãõáéíóú]+/i);
     if (matchNum) baseNum = parseFloat(matchNum[0].replace(',', '.'));
     if (matchUnit) baseUnit = matchUnit[0].toLowerCase();
-
     let val = (alvoNum * baseNum) / baseMacro;
-
-    if (baseUnit.startsWith('uni') || baseUnit.startsWith('u') || baseUnit.startsWith('fati')) {
-      val = Math.round(val * 2) / 2;
-    } else {
-      val = Math.round(val / 5) * 5;
-    }
-
+    if (baseUnit.startsWith('uni') || baseUnit.startsWith('u') || baseUnit.startsWith('fati')) val = Math.round(val * 2) / 2;
+    else val = Math.round(val / 5) * 5;
     return `${val}${baseUnit === 'g' || baseUnit === 'ml' ? baseUnit : ' ' + baseUnit}`; 
   };
 
-  // BUSCA REAL DO BANCO QUANDO CLICA NO LÁPIS
   const handleAbrirEdicao = async (dbId: string | undefined, nomeLocal: string, macrosLocal: any) => {
     if (dbId && !dbId.startsWith('custom_')) {
       try {
@@ -290,7 +309,6 @@ function PrescricaoEditor() {
         }
       } catch (err) {}
     }
-    // Fallback se não tiver no banco ainda
     setModalEdicao({
       isOpen: true, id: dbId || '', nome: nomeLocal,
       cho: String(macrosLocal?.cho || 0), ptn: String(macrosLocal?.ptn || 0), lip: String(macrosLocal?.lip || 0),
@@ -298,7 +316,6 @@ function PrescricaoEditor() {
     });
   };
 
-  // SALVAR E ATUALIZAR A TELA INTEIRA EM TEMPO REAL
   const handleAtualizarAlimento = async () => {
     if (!modalEdicao.nome.trim()) { alert("O nome do alimento não pode estar vazio."); return; }
     setSalvandoAlimento(true);
@@ -317,10 +334,8 @@ function PrescricaoEditor() {
         setModalEdicao(prev => ({ ...prev, id: fakeId }));
       }
 
-      // MÁGICA: ATUALIZA A TELA IMEDIATAMENTE APÓS SALVAR
       const newMacros = { cho: dadosSalvar.cho, ptn: dadosSalvar.ptn, lip: dadosSalvar.lip };
       
-      // 1. Atualiza nas Refeições
       setBlocos(prevBlocos => prevBlocos.map(b => {
         if (b.tipo !== 'refeicao') return b;
         return {
@@ -329,7 +344,6 @@ function PrescricaoEditor() {
             ...o,
             itens: o.itens.map(i => {
               if (i.dbId === modalEdicao.id || i.nome === modalEdicao.nome) {
-                // Se tiver meta setada, recalcula!
                 let newQtd = i.quantidade;
                 if (i.macroAtivo && i.macroAlvo) {
                    const t = parseFloat(i.macroAlvo);
@@ -354,7 +368,6 @@ function PrescricaoEditor() {
         };
       }));
 
-      // 2. Atualiza nas Tabelas de Equivalência
       const atualizarLinhasTabela = (linhas: ItemTabela[]) => linhas.map(t => {
         if (t.dbId === modalEdicao.id || t.nome === modalEdicao.nome) {
           const baseMacroUpdate = t.nome.toLowerCase().includes('arroz') || t.nome.toLowerCase().includes('fruta') ? newMacros.cho : newMacros.ptn;
@@ -382,21 +395,28 @@ function PrescricaoEditor() {
         txt += `${(bloco.nome || '').toUpperCase()}\n`;
         if (bloco.mostrarMeta && bloco.metaCarboidratos) txt += `META para INSULINA: ${bloco.metaCarboidratos}\n`;
         
-        const temOpcoesPreenchidas = (bloco.opcoes || []).some(o => o.itens.some(i => i.nome || i.quantidade));
+        const temOpcoesPreenchidas = (bloco.opcoes || []).some(o => o.itens.some(i => i.nome || i.quantidade || i.medida_caseira));
         
         if (temOpcoesPreenchidas || bloco.conteudoTexto?.trim()) {
           if (temOpcoesPreenchidas) {
             (bloco.opcoes || []).forEach((opcao, idx) => {
-              const temItens = opcao.itens.some(i => i.nome.trim() || i.quantidade.trim());
+              const temItens = opcao.itens.some(i => i.nome.trim() || i.quantidade.trim() || (i.medida_caseira||'').trim());
               if (!temItens) return;
 
               txt += (bloco.opcoes!.length > 1) ? `\nOpção ${idx + 1}:\n` : `\nSugestão:\n`;
               
               let isPrimeiroItemDaLinha = true;
               opcao.itens.forEach((item, iIndex) => {
-                if (!item.nome.trim() && !item.quantidade.trim()) return;
+                if (!item.nome.trim() && !item.quantidade.trim() && !(item.medida_caseira||'').trim()) return;
                 const isNovaLinha = iIndex === 0 || item.conexao === 'nova_linha' || !item.conexao;
-                const val = `${item.quantidade.trim() ? item.quantidade.trim() + ' ' : ''}${item.nome.trim()}`;
+                
+                const hasMedida = !!item.medida_caseira?.trim();
+                const hasQtd = !!item.quantidade?.trim();
+                
+                let val = '';
+                if (hasQtd) val += `${item.quantidade.trim()} `;
+                val += item.nome.trim();
+                if (hasMedida) val += ` (${item.medida_caseira?.trim()})`;
                 
                 if (isNovaLinha) {
                   if (!isPrimeiroItemDaLinha) txt += '\n+ ';
@@ -417,21 +437,9 @@ function PrescricaoEditor() {
       }
     });
 
-    if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) {
-      txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`;
-      tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro, i.porcao_padrao)}\n`; });
-      txt += `\n`;
-    }
-    if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) {
-      txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`;
-      tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro, i.porcao_padrao)}\n`; });
-      txt += `\n`;
-    }
-    if (tabelasSelecionadas.frutas && alvosTabelas.frutas) {
-      txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`;
-      tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro, i.porcao_padrao)}\n`; });
-      txt += `\n`;
-    }
+    if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) { txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`; tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro, i.porcao_padrao)}\n`; }); txt += `\n`; }
+    if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) { txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`; tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro, i.porcao_padrao)}\n`; }); txt += `\n`; }
+    if (tabelasSelecionadas.frutas && alvosTabelas.frutas) { txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`; tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro, i.porcao_padrao)}\n`; }); txt += `\n`; }
     return txt;
   };
 
@@ -447,15 +455,7 @@ function PrescricaoEditor() {
         paciente_id: metadados.pacienteId,
         cardapio_texto: gerarTextoPrescricao(),
         orientacoes_selecionadas: [],
-        dados_estruturados: {
-          blocos,
-          tabelasSelecionadas,
-          alvosTabelas,
-          tabelaProteinas,
-          tabelaArroz,
-          tabelaFrutas,
-          metadados
-        }
+        dados_estruturados: { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, metadados }
       };
 
       if (editId) {
@@ -521,32 +521,25 @@ function PrescricaoEditor() {
 
       const drawHeaderFooter = (page: number) => {
         pdf.setPage(page);
-        
         pdf.setFillColor(255, 255, 255);
         pdf.rect(0, 0, pdfWidth, topMargin, 'F');
         pdf.rect(0, pageHeight - bottomMargin, pdfWidth, bottomMargin, 'F');
 
         if (page === 1) {
-          if (logoData) {
-            pdf.addImage(logoData, 'JPEG', pdfWidth - 48, 12, 36, 36);
-          }
-          
+          if (logoData) { pdf.addImage(logoData, 'JPEG', pdfWidth - 48, 12, 36, 36); }
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(30, 58, 138); 
           pdf.setFontSize(14);
           pdf.text("Nutrição e Educação em Diabetes", 12, 28);
-          
           pdf.setFontSize(13);
           pdf.text("Paciente:", 12, 36);
           pdf.setFont("helvetica", "bold");
           pdf.text(metadados.pacienteNome || '___________________', 32, 36);
-          
           pdf.setDrawColor(0, 0, 0);
           pdf.setLineWidth(0.3);
           pdf.setLineDashPattern([1, 1], 0);
           pdf.line(12, 42, pdfWidth - 12, 42); 
           pdf.setLineDashPattern([], 0); 
-
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(30, 58, 138); 
           pdf.setFontSize(11);
@@ -562,7 +555,6 @@ function PrescricaoEditor() {
         pdf.setFontSize(9);
         const txt1 = "Carolina de Souza Silva Macedo - Nutricionista e Educadora em Diabetes - CRN 29096";
         pdf.text(txt1, pdfWidth / 2, pageHeight - 15, { align: "center" });
-        
         pdf.setTextColor(0, 102, 204);
         const txt2 = "Tel: (19) 98314-1909   |   E-mail: carolinamacedo.nutri@gmail.com   |   Site: www.carolinaminhanutri.com";
         pdf.text(txt2, pdfWidth / 2, pageHeight - 10, { align: "center" });
@@ -576,10 +568,8 @@ function PrescricaoEditor() {
         position = heightLeft - imgHeight + topMargin; 
         pdf.addPage();
         currentPage++;
-        
         pdf.addImage(imgData, 'JPEG', 12, position, imgWidth, imgHeight);
         drawHeaderFooter(currentPage);
-        
         heightLeft -= availableHeight;
       }
 
@@ -703,13 +693,12 @@ function PrescricaoEditor() {
 
                 {!bloco.colapsado && (
                   <>
-                    {/* --- TIPO: REFEIÇÃO --- */}
                     {bloco.tipo === 'refeicao' && (
                       <div className="flex flex-col gap-1.5">
+                        
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                           <input type="text" value={bloco.nome} onChange={(e) => atualizarBloco(bloco.id, 'nome', e.target.value)} placeholder="Título da Refeição (Ex: Café da Manhã)" className="text-[12pt] font-bold text-black outline-none placeholder-slate-300 flex-1 bg-transparent" />
                           
-                          {/* PAINEL DE MACROS AUTOMÁTICO */}
                           {(() => {
                             const macros = calcularTotalMacros(bloco.opcoes?.[0]);
                             if (macros.kcal === '0') return null;
@@ -751,11 +740,10 @@ function PrescricaoEditor() {
                                 <div className="text-[11pt] font-bold text-black mb-1 mt-2">Sugestão:</div>
                               )}
 
-                              <div className="flex flex-wrap items-center gap-y-1 gap-x-2">
+                              <div className="flex flex-col gap-y-1">
                                 {opcao.itens.map((item, iIndex) => {
                                   const isNovaLinha = iIndex === 0 || item.conexao === 'nova_linha' || !item.conexao;
                                   
-                                  // Macro na telinha fantasma respeita a unidade digitada
                                   const calcM = (base?: number) => {
                                     if(!base) return '--';
                                     let bNum = 100;
@@ -767,10 +755,10 @@ function PrescricaoEditor() {
 
                                   return (
                                     <Fragment key={item.id}>
-                                      {isNovaLinha && iIndex > 0 && <div className="w-full basis-full h-0 m-0 p-0" />}
+                                      {isNovaLinha && iIndex > 0 && <div className="w-full h-1" />}
 
-                                      <div className="flex flex-col flex-1 min-w-[280px] relative group/item bg-transparent hover:bg-slate-50 p-1.5 rounded border border-transparent hover:border-slate-200 transition-colors">
-                                        <div className="flex items-center gap-1.5 w-full">
+                                      <div className="flex flex-col flex-1 min-w-[250px] max-w-full relative group/item bg-transparent hover:bg-slate-50 p-1.5 rounded border border-transparent hover:border-slate-200 transition-colors">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 w-full flex-wrap xl:flex-nowrap">
                                           <div className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100"><GripVertical className="w-4 h-4" /></div>
 
                                           {iIndex > 0 ? (
@@ -783,19 +771,66 @@ function PrescricaoEditor() {
                                             <span className="text-[11pt] font-semibold text-black px-1 opacity-0 pointer-events-none">+</span>
                                           )}
 
-                                          <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
-                                          <div className="flex-1 min-w-[120px]">
+                                          {/* --- BOTÃO MÁGICO DE MEDIDA CASEIRA --- */}
+                                          <div className="relative shrink-0">
+                                            <button 
+                                              type="button" 
+                                              onClick={() => setMedidaDropdownAberto(medidaDropdownAberto === item.id ? null : item.id)} 
+                                              className={`p-1.5 rounded transition-colors ${item.quantidade ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+                                              title="Sugerir Medida Caseira (Calculadora Inteligente)"
+                                            >
+                                              <Wand2 className="w-3.5 h-3.5" />
+                                            </button>
+                                            
+                                            {medidaDropdownAberto === item.id && (
+                                              <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 z-[60] py-1">
+                                                <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
+                                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sugestões (Base: {item.quantidade || '0'})</span>
+                                                </div>
+                                                <div className="max-h-48 overflow-y-auto">
+                                                  {getSugestoesMedida(item.quantidade).map((sug, idx) => (
+                                                    <button 
+                                                      key={idx} 
+                                                      type="button" 
+                                                      onClick={() => {
+                                                        atualizarItem(bloco.id, opcao.id, item.id, 'medida_caseira', sug.texto);
+                                                        setMedidaDropdownAberto(null);
+                                                      }} 
+                                                      className="w-full text-left px-3 py-2 text-[10pt] text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition-colors border-b border-slate-50 last:border-0"
+                                                    >
+                                                      <span className="font-semibold block">{sug.texto}</span>
+                                                    </button>
+                                                  ))}
+                                                  {parseQtd(item.quantidade) <= 0 && (
+                                                    <div className="px-3 py-3 text-xs text-slate-500 text-center">Digite o peso primeiro.</div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          <input 
+                                            type="text" 
+                                            value={item.medida_caseira || ''} 
+                                            onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'medida_caseira', e.target.value)} 
+                                            placeholder="Medida caseira" 
+                                            className="w-24 sm:w-28 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] text-slate-600 italic" 
+                                            list="lista-medidas"
+                                            title="Medida Caseira (Opcional)"
+                                          />
+
+                                          <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 sm:w-20 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
+                                          
+                                          <div className="flex-1 min-w-[100px] overflow-hidden">
                                             <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => {
-                                                // Assim que buscar alimento, a gente injeta ele normal, mas ele ainda não tem a porção da base até ele clicar no Lápis e salvar, ou podemos assumir 100g
                                                 setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g' } : i) } : o) } : b))
                                               }} 
                                             />
                                           </div>
                                           
-                                          <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'mais', item.id)} className="opacity-0 group-hover/item:opacity-100 p-1 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded transition-all ml-1" title="Adicionar alimento na frente (+)"><Plus className="w-3.5 h-3.5" /></button>
-                                          {/* O BOTÃO LÁPIS AGORA BUSCA NO BANCO */}
-                                          <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.baseMacros)} className="p-1 text-slate-300 hover:text-emerald-600 opacity-0 group-hover/item:opacity-100 transition-opacity"><Pencil className="w-3.5 h-3.5" /></button>
-                                          <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'mais', item.id)} className="opacity-0 group-hover/item:opacity-100 p-1 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded transition-all ml-1 shrink-0" title="Adicionar alimento na frente (+)"><Plus className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.baseMacros)} className="p-1 text-slate-300 hover:text-emerald-600 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0"><Pencil className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
 
                                         <div className="flex items-center pl-7 gap-2 opacity-20 focus-within:opacity-100 hover:opacity-100 transition-opacity mt-0.5">
@@ -976,7 +1011,7 @@ function PrescricaoEditor() {
       </div>
 
       {/* =========================================================
-          ÁREA DE IMPRESSÃO NATIVA (Ctrl+P do Navegador)
+          ÁREA DE IMPRESSÃO (Nativa do Navegador - Renderiza para o PDF e Impressora)
           ========================================================= */}
       <div id="print-area" className="hidden print:table w-full bg-white text-black font-sans text-[11pt]">
         <thead className="table-header-group">
@@ -1026,7 +1061,7 @@ function PrescricaoEditor() {
                   }
 
                   if (bloco.tipo === 'refeicao') {
-                    const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade));
+                    const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade || i.medida_caseira));
                     if (!temOpcoes && !bloco.conteudoTexto?.trim()) return null;
 
                     return (
@@ -1038,7 +1073,7 @@ function PrescricaoEditor() {
                         )}
                         
                         {(bloco.opcoes || []).map((opcao, idx) => {
-                          const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade);
+                          const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade || i.medida_caseira);
                           if (!temItemPreenchido) return null;
 
                           const linhasPdf: ItemAlimento[][] = [];
@@ -1063,12 +1098,19 @@ function PrescricaoEditor() {
                                   <div key={lIdx} className="mb-1">
                                     {lIdx > 0 ? '+ ' : ''}
                                     {linha.map((item, iIdx) => {
-                                        const qtd = item.quantidade ? <span className="font-semibold">{item.quantidade} </span> : null;
+                                        const hasMedida = !!item.medida_caseira?.trim();
+                                        const hasQtd = !!item.quantidade?.trim();
+                                        
+                                        const qtd = hasQtd ? <span className="font-semibold mr-1">{item.quantidade?.trim()}</span> : null;
+                                        const nome = <span>{item.nome.trim()}</span>;
+                                        const med = hasMedida ? <span className="italic ml-1">({item.medida_caseira?.trim()})</span> : null;
+                                        
                                         const con = iIdx > 0 ? (item.conexao === 'ou' ? ' OU ' : ' + ') : '';
+                                        
                                         return (
                                           <span key={item.id}>
                                             {iIdx > 0 && <span className="font-bold mx-1">{con}</span>}
-                                            {qtd}{item.nome}
+                                            {qtd}{nome}{med}
                                           </span>
                                         );
                                     })}
@@ -1206,6 +1248,23 @@ function PrescricaoEditor() {
           </div>
         </div>
       )}
+
+      {/* LISTA ESCONDIDA DE SUGESTÕES DE MEDIDA CASEIRA */}
+      <datalist id="lista-medidas">
+        <option value="1 colher de café" />
+        <option value="1 colher de chá" />
+        <option value="1 colher de sobremesa" />
+        <option value="1 colher de sopa" />
+        <option value="2 colheres de sopa" />
+        <option value="1 escumadeira" />
+        <option value="1 concha média" />
+        <option value="1 xícara de chá" />
+        <option value="1/2 xícara de chá" />
+        <option value="1 fatia média" />
+        <option value="1 unidade pequena" />
+        <option value="1 unidade média" />
+        <option value="1 copo (200ml)" />
+      </datalist>
 
     </div>
   );
