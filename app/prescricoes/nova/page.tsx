@@ -23,6 +23,7 @@ interface ItemAlimento {
   macroAlvo?: string; 
   conexao?: 'nova_linha' | 'mais' | 'ou'; 
   porcao_padrao?: string; 
+  peso_unitario?: number; 
 }
 interface Opcao { id: string; itens: ItemAlimento[]; }
 type TipoBloco = 'condutas' | 'refeicao' | 'texto_livre';
@@ -39,13 +40,12 @@ interface MetadadosPrescricion {
 
 const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
-// --- CALCULADORA DE MACROS TOTAIS (AGORA IGNORA OS 'OU') ---
+// --- CALCULADORA DE MACROS TOTAIS ---
 const calcularTotalMacros = (opcao?: Opcao) => {
   let total = { cho: 0, ptn: 0, lip: 0, kcal: 0 };
   if (!opcao || !opcao.itens) return { cho: '0.0', ptn: '0.0', lip: '0.0', kcal: '0' };
   
   opcao.itens.forEach(item => {
-    // REGRA NOVA: Ignora sumariamente itens que são apenas opções alternativas
     if (item.conexao === 'ou') return;
 
     const qtdNum = parseQtd(item.quantidade);
@@ -66,10 +66,42 @@ const calcularTotalMacros = (opcao?: Opcao) => {
   return { cho: total.cho.toFixed(1), ptn: total.ptn.toFixed(1), lip: total.lip.toFixed(1), kcal: Math.round(total.kcal).toString() };
 };
 
-// --- CALCULADORA INTELIGENTE DE MEDIDAS CASEIRAS ---
-const getSugestoesMedida = (qtdStr: string) => {
+// --- CALCULADORA INTELIGENTE DE MEDIDAS CASEIRAS COM SUPORTE A FRUTAS PEQUENAS ---
+const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
   const qtd = parseQtd(qtdStr);
   if (qtd <= 0) return [];
+
+  let sugestoes = [];
+
+  if (pesoUnitario && pesoUnitario > 0) {
+     let calc = qtd / pesoUnitario;
+     let textoQtd = '';
+     
+     // Frutas muito pequenas (ex: uva de 8g, morango de 12g) arredondam para números inteiros redondos
+     if (pesoUnitario <= 30) {
+        calc = Math.round(calc);
+        if (calc > 0) {
+           textoQtd = calc.toString();
+           const nomeMedida = calc <= 1 ? 'unidade' : 'unidades';
+           sugestoes.push({ texto: `${textoQtd} ${nomeMedida} (aprox. ${pesoUnitario}g cada)`, base: pesoUnitario });
+        }
+     } else {
+        // Frutas maiores permitem frações (ex: 1 e 1/2 maçã)
+        calc = Math.round(calc * 2) / 2;
+        if (calc > 0) {
+           textoQtd = calc.toString();
+           if (calc === 0.5) textoQtd = '1/2';
+           else if (calc === 1.5) textoQtd = '1 e 1/2';
+           else if (calc === 2.5) textoQtd = '2 e 1/2';
+           else if (calc === 3.5) textoQtd = '3 e 1/2';
+           else if (calc === 4.5) textoQtd = '4 e 1/2';
+
+           const nomeMedida = calc <= 1 ? 'unidade' : 'unidades';
+           sugestoes.push({ texto: `${textoQtd} ${nomeMedida} (aprox. ${pesoUnitario}g cada)`, base: pesoUnitario });
+        }
+     }
+  }
+
   const bases = [
     { sing: 'colher de café', plur: 'colheres de café', base: 2.5 },
     { sing: 'colher de chá', plur: 'colheres de chá', base: 5 },
@@ -84,7 +116,7 @@ const getSugestoesMedida = (qtdStr: string) => {
     { sing: 'copo', plur: 'copos', base: 200 }
   ];
 
-  return bases.map(b => {
+  const sugestoesVolume = bases.map(b => {
      let calc = qtd / b.base;
      calc = Math.round(calc * 2) / 2; 
      if (calc <= 0) return null;
@@ -99,6 +131,8 @@ const getSugestoesMedida = (qtdStr: string) => {
      const nomeMedida = calc <= 1 ? b.sing : b.plur;
      return { texto: `${textoQtd} ${nomeMedida}`, base: b.base };
   }).filter(Boolean) as { texto: string, base: number }[];
+
+  return [...sugestoes, ...sugestoesVolume];
 };
 
 const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
@@ -142,7 +176,7 @@ function PrescricaoEditor() {
   const [error, setError] = useState<string | null>(null);
 
   const [medidaDropdownAberto, setMedidaDropdownAberto] = useState<string | null>(null);
-  const [modalEdicao, setModalEdicao] = useState({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g' });
+  const [modalEdicao, setModalEdicao] = useState({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '' });
   const [salvandoAlimento, setSalvandoAlimento] = useState(false);
   const caloriasCalculadas = (parseFloat(modalEdicao.cho) || 0) * 4 + (parseFloat(modalEdicao.ptn) || 0) * 4 + (parseFloat(modalEdicao.lip) || 0) * 9;
 
@@ -152,7 +186,6 @@ function PrescricaoEditor() {
   const [isSigning, setIsSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
 
-  // ESTADOS DO DRAG AND DROP
   const [draggableItem, setDraggableItem] = useState<string | null>(null);
   const [dragTarget, setDragTarget] = useState<string | null>(null);
 
@@ -331,7 +364,8 @@ function PrescricaoEditor() {
           setModalEdicao({
             isOpen: true, id: data.id, nome: data.nome_exibicao || data.nome,
             cho: String(data.cho || 0), ptn: String(data.ptn || 0), lip: String(data.lip || 0),
-            porcao: data.porcao_padrao || '100g'
+            porcao: data.porcao_padrao || '100g',
+            pesoUnitario: data.peso_unitario ? String(data.peso_unitario) : ''
           });
           return;
         }
@@ -340,7 +374,8 @@ function PrescricaoEditor() {
     setModalEdicao({
       isOpen: true, id: dbId || '', nome: nomeLocal,
       cho: String(macrosLocal?.cho || 0), ptn: String(macrosLocal?.ptn || 0), lip: String(macrosLocal?.lip || 0),
-      porcao: '100g'
+      porcao: '100g',
+      pesoUnitario: ''
     });
   };
 
@@ -351,7 +386,8 @@ function PrescricaoEditor() {
       const dadosSalvar = { 
         nome_exibicao: modalEdicao.nome, cho: parseFloat(modalEdicao.cho) || 0, 
         ptn: parseFloat(modalEdicao.ptn) || 0, lip: parseFloat(modalEdicao.lip) || 0, 
-        kcal: caloriasCalculadas, porcao_padrao: modalEdicao.porcao 
+        kcal: caloriasCalculadas, porcao_padrao: modalEdicao.porcao,
+        peso_unitario: modalEdicao.pesoUnitario ? parseFloat(modalEdicao.pesoUnitario) : null
       };
       
       if (modalEdicao.id && !modalEdicao.id.startsWith('custom_')) {
@@ -388,7 +424,7 @@ function PrescricaoEditor() {
                      newQtd = `${v}${bu === 'g' || bu === 'ml' ? bu : ' '+bu}`;
                    }
                 }
-                return { ...i, nome: dadosSalvar.nome_exibicao, baseMacros: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, quantidade: newQtd };
+                return { ...i, nome: dadosSalvar.nome_exibicao, baseMacros: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, quantidade: newQtd, peso_unitario: dadosSalvar.peso_unitario || undefined };
               }
               return i;
             })
@@ -407,7 +443,7 @@ function PrescricaoEditor() {
       setTabelaArroz(atualizarLinhasTabela(tabelaArroz));
       setTabelaFrutas(atualizarLinhasTabela(tabelaFrutas));
 
-      setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g' });
+      setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '' });
     } catch (err) { alert("Erro ao salvar o alimento."); } 
     finally { setSalvandoAlimento(false); }
   };
@@ -642,7 +678,6 @@ function PrescricaoEditor() {
     finally { setIsSigning(false); }
   };
 
-  // ----- FUNÇÕES DE DRAG AND DROP -----
   const handleDragStart = (e: React.DragEvent, blocoId: string, opcaoId: string, index: number) => {
     e.dataTransfer.setData('text/plain', JSON.stringify({ blocoId, opcaoId, index }));
     e.dataTransfer.effectAllowed = 'move';
@@ -671,7 +706,6 @@ function PrescricaoEditor() {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
       const { blocoId: sourceBlocoId, opcaoId: sourceOpcaoId, index: sourceIndex } = data;
 
-      // Garante que só reordena itens dentro da mesma opção/refeição
       if (sourceBlocoId === targetBlocoId && sourceOpcaoId === targetOpcaoId && sourceIndex !== targetIndex) {
         setBlocos(prev => prev.map(b => {
           if (b.id !== targetBlocoId) return b;
@@ -683,7 +717,6 @@ function PrescricaoEditor() {
               const [removed] = newItens.splice(sourceIndex, 1);
               newItens.splice(targetIndex, 0, removed);
               
-              // Se o item caiu na primeira linha, limpar o operador "+" ou "OU"
               if (newItens.length > 0 && newItens[0].conexao !== 'nova_linha') {
                  newItens[0].conexao = 'nova_linha';
               }
@@ -702,7 +735,6 @@ function PrescricaoEditor() {
     setDragTarget(null);
     setDraggableItem(null);
   };
-  // -------------------------------------
 
   return (
     <div className="min-h-screen bg-slate-100 relative pb-20 font-sans">
@@ -875,7 +907,7 @@ function PrescricaoEditor() {
                                   {(() => {
                                     const macros = calcularTotalMacros(opcao);
                                     return (
-                                      <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded px-2 py-0.5 text-[10px] font-mono text-slate-500 shadow-sm" title={`Macros desta opção`}>
+                                      <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded px-2 py-0.5 text-[10px] font-mono text-slate-500 shadow-sm" title={`Macros desta opção (Ignora os blocos "OU")`}>
                                         <span>C: <span className="font-bold text-blue-600">{macros.cho}g</span></span>
                                         <span className="text-slate-200">|</span>
                                         <span>P: <span className="font-bold text-red-500">{macros.ptn}g</span></span>
@@ -937,7 +969,7 @@ function PrescricaoEditor() {
                                           </div>
 
                                           {iIndex > 0 ? (
-                                            <select value={item.conexao || 'nova_linha'} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)} className="bg-slate-100 text-emerald-700 font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors" title="Alterar conexão">
+                                            <select value={item.conexao || 'nova_linha'} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)} className={`font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors ${item.conexao === 'ou' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-emerald-700'}`} title="Alterar conexão">
                                               <option value="nova_linha">↵ Nova Linha</option>
                                               <option value="mais"> + </option>
                                               <option value="ou"> OU </option>
@@ -946,8 +978,8 @@ function PrescricaoEditor() {
                                             <span className="text-[11pt] font-semibold text-black px-1 opacity-0 pointer-events-none">+</span>
                                           )}
 
-                                          {/* --- BOTÃO MÁGICO DE MEDIDA CASEIRA --- */}
-                                          <div className="relative shrink-0">
+                                          {/* --- BOTÃO MÁGICO DE MEDIDA CASEIRA COM ETIQUETA VISUAL --- */}
+                                          <div className="relative shrink-0 flex items-center gap-1">
                                             <button 
                                               type="button" 
                                               onClick={() => setMedidaDropdownAberto(medidaDropdownAberto === item.id ? null : item.id)} 
@@ -957,13 +989,20 @@ function PrescricaoEditor() {
                                               <Wand2 className="w-3.5 h-3.5" />
                                             </button>
                                             
+                                            {/* ETIQUETA VISUAL DE PESO UNITÁRIO */}
+                                            {item.peso_unitario && (
+                                              <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-2xs" title={`Unidade cadastrada: 1 un = ${item.peso_unitario}g`}>
+                                                ⚖️ 1un={item.peso_unitario}g
+                                              </span>
+                                            )}
+
                                             {medidaDropdownAberto === item.id && (
-                                              <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 z-[60] py-1">
+                                              <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 z-[60] py-1">
                                                 <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
                                                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sugestões (Base: {item.quantidade || '0'})</span>
                                                 </div>
                                                 <div className="max-h-48 overflow-y-auto">
-                                                  {getSugestoesMedida(item.quantidade).map((sug, idx) => (
+                                                  {getSugestoesMedida(item.quantidade, item.peso_unitario).map((sug, idx) => (
                                                     <button 
                                                       key={idx} 
                                                       type="button" 
@@ -996,10 +1035,9 @@ function PrescricaoEditor() {
 
                                           <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 sm:w-20 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
                                           
-                                          {/* FIX OVERFLOW-HIDDEN HERE */}
                                           <div className="flex-1 min-w-[100px] relative">
-                                            <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => {
-                                                setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g' } : i) } : o) } : b))
+                                            <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId, peso_unitario) => {
+                                                setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g', peso_unitario: peso_unitario } : i) } : o) } : b))
                                               }} 
                                             />
                                           </div>
@@ -1404,7 +1442,7 @@ function PrescricaoEditor() {
         </div>
       )}
 
-      {/* MODAL DE EDIÇÃO DE ALIMENTO COM PORÇÃO */}
+      {/* MODAL DE EDIÇÃO DE ALIMENTO COM PESO UNITÁRIO */}
       {modalEdicao.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden">
@@ -1417,11 +1455,18 @@ function PrescricaoEditor() {
                 <label className="block text-sm font-semibold mb-1">Nome do Alimento</label>
                 <input type="text" value={modalEdicao.nome} onChange={e => setModalEdicao({...modalEdicao, nome: e.target.value})} className="w-full px-3 py-2 border rounded" />
               </div>
-              <div>
-                <label className="block text-sm font-semibold mb-1 text-emerald-700">Porção Base / Padrão</label>
-                <input type="text" value={modalEdicao.porcao} onChange={e => setModalEdicao({...modalEdicao, porcao: e.target.value})} placeholder="Ex: 100g, 1 unidade, 200ml" className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50 rounded" />
-                <p className="text-[10px] text-slate-500 mt-1">Os macros abaixo devem ser equivalentes a esta porção exata.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-emerald-700">Porção Padrão</label>
+                  <input type="text" value={modalEdicao.porcao} onChange={e => setModalEdicao({...modalEdicao, porcao: e.target.value})} placeholder="Ex: 100g" className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50 rounded text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-blue-700" title="Usado para calcular a quantidade de unidades na varinha mágica.">Peso Unidade (g)</label>
+                  <input type="number" value={modalEdicao.pesoUnitario} onChange={e => setModalEdicao({...modalEdicao, pesoUnitario: e.target.value})} placeholder="Ex: 12" className="w-full px-3 py-2 border border-blue-300 bg-blue-50 rounded text-sm" />
+                </div>
               </div>
+              <p className="text-[10px] text-slate-500 -mt-2">Os macros abaixo devem ser referentes à <b>Porção Padrão</b>.</p>
+              
               <div className="grid grid-cols-3 gap-3 pt-2">
                 <div><label className="block text-xs font-semibold mb-1">CHO (g)</label><input type="number" value={modalEdicao.cho} onChange={e => setModalEdicao({...modalEdicao, cho: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
                 <div><label className="block text-xs font-semibold mb-1">PTN (g)</label><input type="number" value={modalEdicao.ptn} onChange={e => setModalEdicao({...modalEdicao, ptn: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>

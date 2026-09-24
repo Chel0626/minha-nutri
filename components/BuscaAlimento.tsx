@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase'; // Conexão direta com o banco!
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   valorInicial: string;
-  onSelect: (nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string) => void;
+  onSelect: (nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string, pesoUnitario?: number) => void;
 }
 
 export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
@@ -18,7 +18,6 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isInitialRender = useRef(true); 
 
-  // Fecha o menu ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -29,7 +28,6 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Busca Direta no Banco (Sem Cache, Sem API)
   useEffect(() => {
     const delayDebounce = setTimeout(async () => {
       if (query.length > 2) {
@@ -37,7 +35,6 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
         setDebugError(null);
         
         try {
-          // Faz a busca direta e instantânea no Supabase
           const { data, error } = await supabase
             .from('alimentos')
             .select('*')
@@ -45,7 +42,6 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
             .limit(50);
 
           if (error) {
-            console.error("[Busca Direta] Erro do Supabase:", error);
             setDebugError(error.message);
             setResultados([]);
             setAberto(true);
@@ -53,11 +49,8 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
           }
 
           setResultados(data || []);
-          if (!isInitialRender.current) {
-            setAberto(true);
-          }
+          if (!isInitialRender.current) setAberto(true);
         } catch (error: any) {
-          console.error("[Busca Direta] Erro Crítico:", error);
           setDebugError(error.message);
           setAberto(true);
         } finally {
@@ -84,23 +77,14 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
         onChange={(e) => {
           isInitialRender.current = false;
           setQuery(e.target.value);
-          onSelect(e.target.value, { cho: 0, ptn: 0, lip: 0 }, '');
+          onSelect(e.target.value, { cho: 0, ptn: 0, lip: 0 }, '', undefined);
         }}
-        onFocus={() => {
-          if (resultados.length > 0 || loading || debugError) setAberto(true);
-        }}
+        onFocus={() => { if (resultados.length > 0 || loading || debugError) setAberto(true); }}
       />
       
       {aberto && query.length > 2 && (
         <div className="absolute z-50 w-full bg-white border border-slate-200 mt-1 rounded-md shadow-xl max-h-64 overflow-y-auto">
-          
-          {debugError && (
-            <div className="p-4 bg-red-50 text-red-700 text-xs font-mono break-words border-b border-red-200">
-              <strong className="block mb-1 text-sm text-red-800">⚠️ Erro na Busca:</strong>
-              {debugError}
-            </div>
-          )}
-
+          {debugError && <div className="p-4 bg-red-50 text-red-700 text-xs font-mono">{debugError}</div>}
           {loading ? (
             <div className="px-4 py-4 text-sm text-slate-500 text-center animate-pulse">Buscando...</div>
           ) : resultados.length > 0 ? (
@@ -114,12 +98,9 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
                     setQuery(nomeFinal);
                     onSelect(
                       nomeFinal, 
-                      { 
-                        cho: Number(alimento.cho) || 0, 
-                        ptn: Number(alimento.ptn) || 0, 
-                        lip: Number(alimento.lip) || 0 
-                      },
-                      alimento.id
+                      { cho: Number(alimento.cho) || 0, ptn: Number(alimento.ptn) || 0, lip: Number(alimento.lip) || 0 },
+                      alimento.id,
+                      alimento.peso_unitario ? Number(alimento.peso_unitario) : undefined
                     );
                     setAberto(false);
                   }}
@@ -129,18 +110,12 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
                     <span className="bg-blue-50 text-blue-600 px-1.5 rounded">C: {alimento.cho}g</span>
                     <span className="bg-red-50 text-red-500 px-1.5 rounded">P: {alimento.ptn}g</span>
                     <span className="bg-amber-50 text-amber-600 px-1.5 rounded">L: {alimento.lip}g</span>
-                    {alimento.porcao_padrao && (
-                      <span className="ml-auto text-emerald-600 font-semibold italic text-[9px] bg-emerald-50 px-2 rounded-full border border-emerald-100">
-                        {alimento.porcao_padrao}
-                      </span>
-                    )}
+                    {alimento.peso_unitario && <span className="ml-auto text-blue-600 font-semibold italic text-[9px]">1 un = {alimento.peso_unitario}g</span>}
                   </div>
                 </div>
               );
             })
-          ) : !debugError ? (
-            <div className="px-4 py-4 text-sm text-slate-500 text-center">Nenhum alimento encontrado.</div>
-          ) : null}
+          ) : !debugError ? ( <div className="px-4 py-4 text-sm text-slate-500 text-center">Nenhum alimento encontrado.</div> ) : null}
         </div>
       )}
     </div>
