@@ -2,6 +2,6 @@
   "/_not-found/page": "app/_not-found/page.js",
   "/page": "app/page.js",
   "/pacientes/page": "app/pacientes/page.js",
-  "/prescricoes/nova/page": "app/prescricoes/nova/page.js",
-  "/pacientes/[id]/page": "app/pacientes/[id]/page.js"
+  "/pacientes/[id]/page": "app/pacientes/[id]/page.js",
+  "/prescricoes/nova/page": "app/prescricoes/nova/page.js"
 }

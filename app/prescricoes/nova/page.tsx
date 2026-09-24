@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
-import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe, Wand2 } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe, Wand2, Bold, Italic, Underline } from 'lucide-react';
 import BuscaAlimento from '@/components/BuscaAlimento';
 
 import html2canvas from 'html2canvas';
@@ -34,16 +34,20 @@ interface MetadadosPrescricion {
   faseCaloricas: string; 
   dataPrescricao: string;
   tituloDistribuicao?: string; 
+  tituloFormatacao?: { bold: boolean; italic: boolean; underline: boolean; size: number };
 }
 
 const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
-// --- CALCULADORA DE MACROS TOTAIS ---
+// --- CALCULADORA DE MACROS TOTAIS (AGORA IGNORA OS 'OU') ---
 const calcularTotalMacros = (opcao?: Opcao) => {
   let total = { cho: 0, ptn: 0, lip: 0, kcal: 0 };
   if (!opcao || !opcao.itens) return { cho: '0.0', ptn: '0.0', lip: '0.0', kcal: '0' };
   
   opcao.itens.forEach(item => {
+    // REGRA NOVA: Ignora sumariamente itens que são apenas opções alternativas
+    if (item.conexao === 'ou') return;
+
     const qtdNum = parseQtd(item.quantidade);
     if (qtdNum > 0 && item.baseMacros) {
       let bNum = 100;
@@ -76,8 +80,7 @@ const getSugestoesMedida = (qtdStr: string) => {
     { sing: 'concha média', plur: 'conchas médias', base: 100 },
     { sing: 'xícara de chá', plur: 'xícaras de chá', base: 150 },
     { sing: 'fatia média', plur: 'fatias médias', base: 30 },
-    { sing: 'unidade pequena', plur: 'unidades pequenas', base: 50 },
-    { sing: 'unidade média', plur: 'unidades médias', base: 100 },
+    { sing: 'fatia grande', plur: 'fatias grandes', base: 50 },
     { sing: 'copo', plur: 'copos', base: 200 }
   ];
 
@@ -117,7 +120,8 @@ function PrescricaoEditor() {
     pacienteNome: '', 
     faseCaloricas: '', 
     dataPrescricao: dataAtual,
-    tituloDistribuicao: 'Distribuição dos carboidratos por refeição:'
+    tituloDistribuicao: 'Distribuição dos carboidratos por refeição:',
+    tituloFormatacao: { bold: false, italic: false, underline: false, size: 12 }
   });
   const [tabelasColapsadas, setTabelasColapsadas] = useState(true);
 
@@ -179,7 +183,8 @@ function PrescricaoEditor() {
         if (d.metadados) {
           setMetadados({
             ...d.metadados,
-            tituloDistribuicao: d.metadados.tituloDistribuicao || 'Distribuição dos carboidratos por refeição:'
+            tituloDistribuicao: d.metadados.tituloDistribuicao || 'Distribuição dos carboidratos por refeição:',
+            tituloFormatacao: d.metadados.tituloFormatacao || { bold: false, italic: false, underline: false, size: 12 }
           });
         }
       } else {
@@ -574,9 +579,16 @@ function PrescricaoEditor() {
           
           if (metadados.tituloDistribuicao) {
              pdf.setTextColor(0, 0, 0);
-             pdf.setFontSize(12);
-             pdf.setFont("helvetica", "bold");
+             const fmt = metadados.tituloFormatacao || { bold: false, italic: false, underline: false, size: 12 };
+             const fStyle = (fmt.bold && fmt.italic) ? "bolditalic" : fmt.bold ? "bold" : fmt.italic ? "italic" : "normal";
+             pdf.setFont("helvetica", fStyle);
+             pdf.setFontSize(fmt.size);
              pdf.text(metadados.tituloDistribuicao, 12, 66);
+             if (fmt.underline) {
+                 const textWidth = pdf.getTextWidth(metadados.tituloDistribuicao);
+                 pdf.setLineWidth(0.5);
+                 pdf.line(12, 67, 12 + textWidth, 67);
+             }
              position = topMargin + 15;
           }
         }
@@ -764,14 +776,25 @@ function PrescricaoEditor() {
               <input type="text" value={metadados.dataPrescricao} onChange={handleDataChange} className="text-[11pt] text-[#1e3a8a] w-32 outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300" />
             </div>
             
-            {/* TÍTULO EDITÁVEL */}
-            <input 
-              type="text" 
-              value={metadados.tituloDistribuicao || ''} 
-              onChange={handleTituloDistribuicaoChange} 
-              className="text-[13pt] font-bold underline mt-8 mb-6 text-black w-full outline-none bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#1e3a8a]" 
-              placeholder="Ex: Distribuição dos carboidratos por refeição:"
-            />
+            {/* TÍTULO EDITÁVEL COM BARRA DE FORMATAÇÃO */}
+            <div className="mt-8 mb-6 group relative">
+              <div className="flex items-center gap-2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity print:hidden bg-slate-50 p-1 rounded w-max border border-slate-200">
+                <button type="button" onClick={() => setMetadados({...metadados, tituloFormatacao: {...metadados.tituloFormatacao!, bold: !metadados.tituloFormatacao?.bold}})} className={`p-1.5 rounded transition-colors ${metadados.tituloFormatacao?.bold ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-200 text-slate-500'}`} title="Negrito"><Bold className="w-3.5 h-3.5" /></button>
+                <button type="button" onClick={() => setMetadados({...metadados, tituloFormatacao: {...metadados.tituloFormatacao!, italic: !metadados.tituloFormatacao?.italic}})} className={`p-1.5 rounded transition-colors ${metadados.tituloFormatacao?.italic ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-200 text-slate-500'}`} title="Itálico"><Italic className="w-3.5 h-3.5" /></button>
+                <button type="button" onClick={() => setMetadados({...metadados, tituloFormatacao: {...metadados.tituloFormatacao!, underline: !metadados.tituloFormatacao?.underline}})} className={`p-1.5 rounded transition-colors ${metadados.tituloFormatacao?.underline ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-200 text-slate-500'}`} title="Sublinhado"><Underline className="w-3.5 h-3.5" /></button>
+                <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                <button type="button" onClick={() => setMetadados({...metadados, tituloFormatacao: {...metadados.tituloFormatacao!, size: Math.max(9, (metadados.tituloFormatacao?.size || 12) - 1)}})} className="px-2 py-1 rounded hover:bg-slate-200 text-xs font-semibold text-slate-600" title="Diminuir Fonte">A-</button>
+                <button type="button" onClick={() => setMetadados({...metadados, tituloFormatacao: {...metadados.tituloFormatacao!, size: Math.min(24, (metadados.tituloFormatacao?.size || 12) + 1)}})} className="px-2 py-1 rounded hover:bg-slate-200 text-xs font-semibold text-slate-600" title="Aumentar Fonte">A+</button>
+              </div>
+              <input 
+                type="text" 
+                value={metadados.tituloDistribuicao || ''} 
+                onChange={handleTituloDistribuicaoChange} 
+                className={`w-full text-black outline-none bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#1e3a8a] ${metadados.tituloFormatacao?.bold ? 'font-bold' : 'font-normal'} ${metadados.tituloFormatacao?.italic ? 'italic' : ''} ${metadados.tituloFormatacao?.underline ? 'underline' : ''}`}
+                style={{ fontSize: `${metadados.tituloFormatacao?.size || 12}pt` }}
+                placeholder="Escreva um título ou deixe em branco..."
+              />
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -973,6 +996,7 @@ function PrescricaoEditor() {
 
                                           <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 sm:w-20 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
                                           
+                                          {/* FIX OVERFLOW-HIDDEN HERE */}
                                           <div className="flex-1 min-w-[100px] relative">
                                             <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => {
                                                 setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g' } : i) } : o) } : b))
@@ -1186,7 +1210,14 @@ function PrescricaoEditor() {
                 
                 {/* TÍTULO EDITÁVEL NA IMPRESSÃO */}
                 {metadados.tituloDistribuicao && (
-                  <p className="text-[12pt] font-bold underline mt-6 mb-2">{metadados.tituloDistribuicao}</p>
+                  <p className="mt-6 mb-2" style={{
+                    fontSize: `${metadados.tituloFormatacao?.size || 12}pt`,
+                    fontWeight: metadados.tituloFormatacao?.bold ? 'bold' : 'normal',
+                    fontStyle: metadados.tituloFormatacao?.italic ? 'italic' : 'normal',
+                    textDecoration: metadados.tituloFormatacao?.underline ? 'underline' : 'none',
+                  }}>
+                    {metadados.tituloDistribuicao}
+                  </p>
                 )}
               </div>
             </td>
@@ -1417,8 +1448,6 @@ function PrescricaoEditor() {
         <option value="1 xícara de chá" />
         <option value="1/2 xícara de chá" />
         <option value="1 fatia média" />
-        <option value="1 unidade pequena" />
-        <option value="1 unidade média" />
         <option value="1 copo (200ml)" />
       </datalist>
 
