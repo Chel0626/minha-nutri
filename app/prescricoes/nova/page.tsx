@@ -1449,7 +1449,6 @@ function PrescricaoEditor() {
                           {tabelaProteinas.map((item, idx) => item.nome ? (
                             <tr key={idx}><td className="border border-black px-2 py-1">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic">{item.medida_caseira || '--'}</td></tr>
                           ) : null)}
-                          <tr><td className="border border-black px-2 py-1">Ovos</td><td className="border border-black px-2 py-1 text-center italic">Ajustar</td><td className="border border-black px-2 py-1 italic">1 ovo = ~6g ptn</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -1509,6 +1508,8 @@ function PrescricaoEditor() {
         </div>
       </div>
 
+      {/* MODAIS (Restante inalterado) */}
+      
       {isSignModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
