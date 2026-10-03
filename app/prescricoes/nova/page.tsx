@@ -28,7 +28,7 @@ interface ItemAlimento {
 interface Opcao { id: string; itens: ItemAlimento[]; }
 type TipoBloco = 'condutas' | 'refeicao' | 'texto_livre';
 interface Bloco { id: string; tipo: TipoBloco; nome?: string; metaCarboidratos?: string; mostrarMeta?: boolean; opcoes?: Opcao[]; titulo?: string; conteudoTexto: string; expandido?: boolean; colapsado?: boolean; }
-interface ItemTabela { id: string; dbId?: string; nome: string; baseMacro: number; macrosReal?: { cho: number; ptn: number; lip: number }; porcao_padrao?: string; }
+interface ItemTabela { id: string; dbId?: string; nome: string; baseMacro: number; macrosReal?: { cho: number; ptn: number; lip: number }; porcao_padrao?: string; peso_unitario?: number; medida_caseira?: string; }
 interface MetadadosPrescricion { 
   pacienteId: string; 
   pacienteNome: string; 
@@ -66,7 +66,7 @@ const calcularTotalMacros = (opcao?: Opcao) => {
   return { cho: total.cho.toFixed(1), ptn: total.ptn.toFixed(1), lip: total.lip.toFixed(1), kcal: Math.round(total.kcal).toString() };
 };
 
-// --- CALCULADORA INTELIGENTE DE MEDIDAS CASEIRAS COM SUPORTE A FRUTAS PEQUENAS ---
+// --- CALCULADORA INTELIGENTE DE MEDIDAS CASEIRAS ---
 const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
   const qtd = parseQtd(qtdStr);
   if (qtd <= 0) return [];
@@ -77,7 +77,6 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
      let calc = qtd / pesoUnitario;
      let textoQtd = '';
      
-     // Frutas muito pequenas (ex: uva de 8g, morango de 12g) arredondam para números inteiros redondos
      if (pesoUnitario <= 30) {
         calc = Math.round(calc);
         if (calc > 0) {
@@ -86,7 +85,6 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
            sugestoes.push({ texto: `${textoQtd} ${nomeMedida} (aprox. ${pesoUnitario}g cada)`, base: pesoUnitario });
         }
      } else {
-        // Frutas maiores permitem frações (ex: 1 e 1/2 maçã)
         calc = Math.round(calc * 2) / 2;
         if (calc > 0) {
            textoQtd = calc.toString();
@@ -138,6 +136,7 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
 const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
 const TABELA_ARROZ = [ { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 }, { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 }, { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 }, { nome: 'Milho-verde (enlatado)', base: 17.1 } ];
 const TABELA_FRUTAS = [ { nome: 'Abacaxi', base: 12.3 }, { nome: 'Banana Prata', base: 26.0 }, { nome: 'Goiaba', base: 13.0 }, { nome: 'Laranja', base: 8.9 }, { nome: 'Mamão', base: 11.6 }, { nome: 'Manga', base: 15.0 }, { nome: 'Maçã', base: 15.2 }, { nome: 'Melancia', base: 6.8 }, { nome: 'Melão', base: 7.5 }, { nome: 'Morango', base: 6.8 }, { nome: 'Uva', base: 17.3 } ];
+const TABELA_FEIJAO = [ { nome: 'Feijão carioca (cozido)', base: 13.6 }, { nome: 'Feijão preto (cozido)', base: 14.0 }, { nome: 'Lentilha (cozida)', base: 16.3 }, { nome: 'Grão-de-bico (cozido)', base: 21.2 }, { nome: 'Ervilha em grãos (cozida)', base: 14.2 } ];
 
 function PrescricaoEditor() {
   const { pacientes } = usePacientes();
@@ -164,18 +163,20 @@ function PrescricaoEditor() {
     conteudoTexto: '', opcoes: [{ id: `op-${Date.now()}`, itens: [{ id: `it-${Date.now()}`, quantidade: '', medida_caseira: '', nome: '', conexao: 'nova_linha', porcao_padrao: '100g' }] }]
   }]);
 
-  const [tabelasSelecionadas, setTabelasSelecionadas] = useState({ proteinas: false, substitutosArroz: false, frutas: false });
-  const [alvosTabelas, setAlvosTabelas] = useState({ proteinas: '', substitutosArroz: '', frutas: '' });
+  const [tabelasSelecionadas, setTabelasSelecionadas] = useState({ proteinas: false, substitutosArroz: false, frutas: false, feijao: false });
+  const [alvosTabelas, setAlvosTabelas] = useState({ proteinas: '', substitutosArroz: '', frutas: '', feijao: '' });
 
   const [tabelaProteinas, setTabelaProteinas] = useState<ItemTabela[]>(TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
   const [tabelaArroz, setTabelaArroz] = useState<ItemTabela[]>(TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
   const [tabelaFrutas, setTabelaFrutas] = useState<ItemTabela[]>(TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+  const [tabelaFeijao, setTabelaFeijao] = useState<ItemTabela[]>(TABELA_FEIJAO.map((t, i) => ({ id: `tfej-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [medidaDropdownAberto, setMedidaDropdownAberto] = useState<string | null>(null);
+  const [medidaDropdownTabelaAberto, setMedidaDropdownTabelaAberto] = useState<string | null>(null);
   const [modalEdicao, setModalEdicao] = useState({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '' });
   const [salvandoAlimento, setSalvandoAlimento] = useState(false);
   const caloriasCalculadas = (parseFloat(modalEdicao.cho) || 0) * 4 + (parseFloat(modalEdicao.ptn) || 0) * 4 + (parseFloat(modalEdicao.lip) || 0) * 9;
@@ -207,11 +208,12 @@ function PrescricaoEditor() {
       if (data && data.dados_estruturados) {
         const d = data.dados_estruturados;
         setBlocos(d.blocos || []);
-        setTabelasSelecionadas(d.tabelasSelecionadas || { proteinas: false, substitutosArroz: false, frutas: false });
-        setAlvosTabelas(d.alvosTabelas || { proteinas: '', substitutosArroz: '', frutas: '' });
+        setTabelasSelecionadas(d.tabelasSelecionadas || { proteinas: false, substitutosArroz: false, frutas: false, feijao: false });
+        setAlvosTabelas(d.alvosTabelas || { proteinas: '', substitutosArroz: '', frutas: '', feijao: '' });
         setTabelaProteinas(d.tabelaProteinas || TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
         setTabelaArroz(d.tabelaArroz || TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
         setTabelaFrutas(d.tabelaFrutas || TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+        setTabelaFeijao(d.tabelaFeijao || TABELA_FEIJAO.map((t, i) => ({ id: `tfej-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
         
         if (d.metadados) {
           setMetadados({
@@ -329,18 +331,34 @@ function PrescricaoEditor() {
     }));
   };
 
-  const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas') => setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
-  const adicionarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas') => {
+  const toggleTabela = (tabela: 'proteinas' | 'substitutosArroz' | 'frutas' | 'feijao') => setTabelasSelecionadas({ ...tabelasSelecionadas, [tabela]: !tabelasSelecionadas[tabela] });
+  const adicionarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas' | 'feijao') => {
     const newItem = { id: `tab-${Date.now()}`, nome: '', baseMacro: 0, porcao_padrao: '100g' };
-    if (tabela === 'proteinas') setTabelaProteinas([...tabelaProteinas, newItem]); if (tabela === 'arroz') setTabelaArroz([...tabelaArroz, newItem]); if (tabela === 'frutas') setTabelaFrutas([...tabelaFrutas, newItem]);
+    if (tabela === 'proteinas') setTabelaProteinas([...tabelaProteinas, newItem]); 
+    if (tabela === 'arroz') setTabelaArroz([...tabelaArroz, newItem]); 
+    if (tabela === 'frutas') setTabelaFrutas([...tabelaFrutas, newItem]);
+    if (tabela === 'feijao') setTabelaFeijao([...tabelaFeijao, newItem]);
   };
-  const removerItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas', id: string) => {
-    if (tabela === 'proteinas') setTabelaProteinas(prev => prev.filter(i => i.id !== id)); if (tabela === 'arroz') setTabelaArroz(prev => prev.filter(i => i.id !== id)); if (tabela === 'frutas') setTabelaFrutas(prev => prev.filter(i => i.id !== id));
+  const removerItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas' | 'feijao', id: string) => {
+    if (tabela === 'proteinas') setTabelaProteinas(prev => prev.filter(i => i.id !== id)); 
+    if (tabela === 'arroz') setTabelaArroz(prev => prev.filter(i => i.id !== id)); 
+    if (tabela === 'frutas') setTabelaFrutas(prev => prev.filter(i => i.id !== id));
+    if (tabela === 'feijao') setTabelaFeijao(prev => prev.filter(i => i.id !== id));
   };
-  const atualizarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas', id: string, nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string) => {
+  const atualizarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas' | 'feijao', id: string, nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string, pesoUnitario?: number) => {
     const baseMacro = tabela === 'proteinas' ? macros.ptn : macros.cho;
-    const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, nome, baseMacro, macrosReal: macros, dbId } : i);
-    if (tabela === 'proteinas') setTabelaProteinas(updateFn); else if (tabela === 'arroz') setTabelaArroz(updateFn); else if (tabela === 'frutas') setTabelaFrutas(updateFn);
+    const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, nome, baseMacro, macrosReal: macros, dbId, peso_unitario: pesoUnitario } : i);
+    if (tabela === 'proteinas') setTabelaProteinas(updateFn); 
+    else if (tabela === 'arroz') setTabelaArroz(updateFn); 
+    else if (tabela === 'frutas') setTabelaFrutas(updateFn);
+    else if (tabela === 'feijao') setTabelaFeijao(updateFn);
+  };
+  const atualizarCampoTabela = (tabela: 'proteinas' | 'arroz' | 'frutas' | 'feijao', id: string, campo: keyof ItemTabela, valor: any) => {
+    const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, [campo]: valor } : i);
+    if (tabela === 'proteinas') setTabelaProteinas(updateFn); 
+    else if (tabela === 'arroz') setTabelaArroz(updateFn); 
+    else if (tabela === 'frutas') setTabelaFrutas(updateFn);
+    else if (tabela === 'feijao') setTabelaFeijao(updateFn);
   };
   
   const calcularPesoEquivalente = (alvo: string, baseMacro: number, porcaoPadrao: string = '100g') => { 
@@ -434,14 +452,15 @@ function PrescricaoEditor() {
 
       const atualizarLinhasTabela = (linhas: ItemTabela[]) => linhas.map(t => {
         if (t.dbId === modalEdicao.id || t.nome === modalEdicao.nome) {
-          const baseMacroUpdate = t.nome.toLowerCase().includes('arroz') || t.nome.toLowerCase().includes('fruta') ? newMacros.cho : newMacros.ptn;
-          return { ...t, nome: dadosSalvar.nome_exibicao, baseMacro: baseMacroUpdate, macrosReal: newMacros, porcao_padrao: dadosSalvar.porcao_padrao };
+          const baseMacroUpdate = t.nome.toLowerCase().includes('arroz') || t.nome.toLowerCase().includes('fruta') || t.nome.toLowerCase().includes('feij') || t.nome.toLowerCase().includes('lentilha') || t.nome.toLowerCase().includes('grão') ? newMacros.cho : newMacros.ptn;
+          return { ...t, nome: dadosSalvar.nome_exibicao, baseMacro: baseMacroUpdate, macrosReal: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, peso_unitario: dadosSalvar.peso_unitario || undefined };
         }
         return t;
       });
       setTabelaProteinas(atualizarLinhasTabela(tabelaProteinas));
       setTabelaArroz(atualizarLinhasTabela(tabelaArroz));
       setTabelaFrutas(atualizarLinhasTabela(tabelaFrutas));
+      setTabelaFeijao(atualizarLinhasTabela(tabelaFeijao));
 
       setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '' });
     } catch (err) { alert("Erro ao salvar o alimento."); } 
@@ -501,9 +520,11 @@ function PrescricaoEditor() {
       }
     });
 
-    if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) { txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`; tabelaProteinas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro, i.porcao_padrao)}\n`; }); txt += `\n`; }
-    if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) { txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`; tabelaArroz.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro, i.porcao_padrao)}\n`; }); txt += `\n`; }
-    if (tabelasSelecionadas.frutas && alvosTabelas.frutas) { txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`; tabelaFrutas.forEach(i => { if (i.nome) txt += `• ${i.nome} - ${calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro, i.porcao_padrao)}\n`; }); txt += `\n`; }
+    if (tabelasSelecionadas.proteinas && alvosTabelas.proteinas) { txt += `${'-'.repeat(60)}\nTABELA 1: PROTEÍNAS ANIMAIS (Alvo: ${alvosTabelas.proteinas}g PTN)\n${'-'.repeat(60)}\n`; tabelaProteinas.forEach(i => { if (i.nome) { const pesoStr = calcularPesoEquivalente(alvosTabelas.proteinas, i.baseMacro, i.porcao_padrao); txt += `• ${i.nome} - ${pesoStr} ${i.medida_caseira ? '(' + i.medida_caseira + ')' : ''}\n`; } }); txt += `\n`; }
+    if (tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz) { txt += `${'-'.repeat(60)}\nTABELA 2: SUBSTITUTOS DE ARROZ/RAÍZES (Alvo: ${alvosTabelas.substitutosArroz}g CHO)\n${'-'.repeat(60)}\n`; tabelaArroz.forEach(i => { if (i.nome) { const pesoStr = calcularPesoEquivalente(alvosTabelas.substitutosArroz, i.baseMacro, i.porcao_padrao); txt += `• ${i.nome} - ${pesoStr} ${i.medida_caseira ? '(' + i.medida_caseira + ')' : ''}\n`; } }); txt += `\n`; }
+    if (tabelasSelecionadas.frutas && alvosTabelas.frutas) { txt += `${'-'.repeat(60)}\nTABELA 3: FRUTAS (Alvo: ${alvosTabelas.frutas}g CHO)\n${'-'.repeat(60)}\n`; tabelaFrutas.forEach(i => { if (i.nome) { const pesoStr = calcularPesoEquivalente(alvosTabelas.frutas, i.baseMacro, i.porcao_padrao); txt += `• ${i.nome} - ${pesoStr} ${i.medida_caseira ? '(' + i.medida_caseira + ')' : ''}\n`; } }); txt += `\n`; }
+    if (tabelasSelecionadas.feijao && alvosTabelas.feijao) { txt += `${'-'.repeat(60)}\nTABELA 4: SUBSTITUTOS DE LEGUMINOSAS/FEIJÕES (Alvo: ${alvosTabelas.feijao}g CHO)\n${'-'.repeat(60)}\n`; tabelaFeijao.forEach(i => { if (i.nome) { const pesoStr = calcularPesoEquivalente(alvosTabelas.feijao, i.baseMacro, i.porcao_padrao); txt += `• ${i.nome} - ${pesoStr} ${i.medida_caseira ? '(' + i.medida_caseira + ')' : ''}\n`; } }); txt += `\n`; }
+    
     return txt;
   };
 
@@ -519,7 +540,7 @@ function PrescricaoEditor() {
         paciente_id: metadados.pacienteId,
         cardapio_texto: gerarTextoPrescricao(),
         orientacoes_selecionadas: [],
-        dados_estruturados: { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, metadados }
+        dados_estruturados: { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, tabelaFeijao, metadados }
       };
 
       if (editId) {
@@ -736,6 +757,86 @@ function PrescricaoEditor() {
     setDraggableItem(null);
   };
 
+  // FUNÇÃO HELPER PARA RENDERIZAR AS LINHAS DAS TABELAS DE EQUIVALENTES
+  const renderTabelaRows = (tabelaNome: 'proteinas' | 'arroz' | 'frutas' | 'feijao', data: ItemTabela[], alvo: string) => (
+    <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto">
+      {data.map((item) => {
+        const pesoCalculado = calcularPesoEquivalente(alvo, item.baseMacro, item.porcao_padrao);
+        return (
+          <div key={item.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white p-2 rounded border border-slate-200">
+            <div className="flex-1 min-w-[200px] relative z-10">
+              <BuscaAlimento
+                valorInicial={item.nome}
+                onSelect={(nome, macros, dbId, peso_unitario) => atualizarItemTabela(tabelaNome, item.id, nome, macros, dbId, peso_unitario)}
+              />
+            </div>
+            
+            <div className="w-24 text-sm font-bold text-slate-700 bg-slate-100 border border-slate-200 py-2 text-center rounded shrink-0">
+              {pesoCalculado}
+            </div>
+
+            {/* Varinha Mágica */}
+            <div className="relative shrink-0 flex items-center gap-1 z-20">
+              <button
+                type="button"
+                onClick={() => setMedidaDropdownTabelaAberto(medidaDropdownTabelaAberto === item.id ? null : item.id)}
+                className={`p-2 rounded transition-colors ${pesoCalculado !== '--' ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+                title="Sugerir Medida Caseira"
+              >
+                <Wand2 className="w-4 h-4" />
+              </button>
+
+              {item.peso_unitario && (
+                <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-2xs" title="Peso unitário ativado">
+                  ⚖️ 1un={item.peso_unitario}g
+                </span>
+              )}
+
+              {medidaDropdownTabelaAberto === item.id && pesoCalculado !== '--' && (
+                <div className="absolute top-full right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 z-[60] py-1">
+                  <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sugestões (Base: {pesoCalculado})</span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {getSugestoesMedida(pesoCalculado, item.peso_unitario).map((sug, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          atualizarCampoTabela(tabelaNome, item.id, 'medida_caseira', sug.texto);
+                          setMedidaDropdownTabelaAberto(null);
+                        }}
+                        className="w-full text-left px-3 py-2 text-[10pt] text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition-colors border-b border-slate-50 last:border-0"
+                      >
+                        <span className="font-semibold block">{sug.texto}</span>
+                      </button>
+                    ))}
+                    {parseQtd(pesoCalculado) <= 0 && (
+                      <div className="px-3 py-3 text-xs text-slate-500 text-center">Defina o alvo da tabela primeiro.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <input
+              type="text"
+              value={item.medida_caseira || ''}
+              onChange={(e) => atualizarCampoTabela(tabelaNome, item.id, 'medida_caseira', e.target.value)}
+              placeholder="Medida caseira"
+              className="w-32 shrink-0 px-2 py-1.5 border border-slate-300 focus:border-[#0066cc] bg-white rounded outline-none text-sm text-slate-700 italic"
+              list="lista-medidas"
+            />
+
+            <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.macrosReal)} className="p-2 text-slate-400 hover:text-emerald-600 shrink-0"><Pencil className="w-4 h-4" /></button>
+            <button type="button" onClick={() => removerItemTabela(tabelaNome, item.id)} className="p-2 text-slate-400 hover:text-red-600 shrink-0"><Trash2 className="w-4 h-4" /></button>
+          </div>
+        );
+      })}
+      <button type="button" onClick={() => adicionarItemTabela(tabelaNome)} className="text-emerald-600 text-sm font-semibold flex items-center gap-1 mt-2 hover:underline"><Plus className="w-4 h-4"/> Adicionar Linha</button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-100 relative pb-20 font-sans">
       
@@ -868,7 +969,7 @@ function PrescricaoEditor() {
                           {(() => {
                             const macros = calcularTotalMacros(bloco.opcoes?.[0]);
                             return (
-                              <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-100 rounded-md px-3 py-1.5 text-[11px] font-mono text-slate-600 shadow-sm shrink-0" title={bloco.opcoes && bloco.opcoes.length > 1 ? "Calculado com base na Opção 1" : "Total de Macros"}>
+                              <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-100 rounded-md px-3 py-1.5 text-[11px] font-mono text-slate-600 shadow-sm shrink-0" title={bloco.opcoes && bloco.opcoes.length > 1 ? "Calculado com base na Opção 1 (Ignora itens 'OU')" : "Total de Macros (Ignora itens 'OU')"}>
                                 <span>C: <span className="font-bold text-blue-600">{macros.cho}g</span></span>
                                 <span className="text-slate-300">|</span>
                                 <span>P: <span className="font-bold text-red-500">{macros.ptn}g</span></span>
@@ -1136,6 +1237,7 @@ function PrescricaoEditor() {
 
           {!tabelasColapsadas && (
             <div className="p-8 space-y-4 border-t border-slate-200">
+              
               <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
                 <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
                   <label className="flex items-center gap-3 cursor-pointer flex-1">
@@ -1149,26 +1251,14 @@ function PrescricaoEditor() {
                     </div>
                   )}
                 </div>
-                {tabelasSelecionadas.proteinas && (
-                  <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
-                    {tabelaProteinas.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border border-slate-200">
-                        <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => atualizarItemTabela('proteinas', item.id, nome, macros, dbId)} />
-                        <div className="w-24 text-sm font-bold text-slate-700 bg-slate-100 border border-slate-200 py-1.5 text-center rounded">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro, item.porcao_padrao)}</div>
-                        <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.macrosReal)} className="p-1.5 text-slate-400 hover:text-emerald-600"><Pencil className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => removerItemTabela('proteinas', item.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => adicionarItemTabela('proteinas')} className="text-emerald-600 text-sm font-semibold flex items-center gap-1 mt-2 hover:underline"><Plus className="w-4 h-4"/> Adicionar Linha</button>
-                  </div>
-                )}
+                {tabelasSelecionadas.proteinas && renderTabelaRows('proteinas', tabelaProteinas, alvosTabelas.proteinas)}
               </div>
 
               <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
                 <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
                   <label className="flex items-center gap-3 cursor-pointer flex-1">
                     <input type="checkbox" checked={tabelasSelecionadas.substitutosArroz} onChange={() => toggleTabela('substitutosArroz')} className="w-5 h-5 text-emerald-600 rounded" />
-                    <span className="font-bold text-slate-800">Tabela 2: Substitutos de Arroz</span>
+                    <span className="font-bold text-slate-800">Tabela 2: Substitutos de Arroz / Raízes</span>
                   </label>
                   {tabelasSelecionadas.substitutosArroz && (
                     <div className="flex items-center gap-2">
@@ -1177,26 +1267,30 @@ function PrescricaoEditor() {
                     </div>
                   )}
                 </div>
-                {tabelasSelecionadas.substitutosArroz && (
-                  <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
-                    {tabelaArroz.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border border-slate-200">
-                        <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => atualizarItemTabela('arroz', item.id, nome, macros, dbId)} />
-                        <div className="w-24 text-sm font-bold text-slate-700 bg-slate-100 border border-slate-200 py-1.5 text-center rounded">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro, item.porcao_padrao)}</div>
-                        <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.macrosReal)} className="p-1.5 text-slate-400 hover:text-emerald-600"><Pencil className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => removerItemTabela('arroz', item.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => adicionarItemTabela('arroz')} className="text-emerald-600 text-sm font-semibold flex items-center gap-1 mt-2 hover:underline"><Plus className="w-4 h-4"/> Adicionar Linha</button>
-                  </div>
-                )}
+                {tabelasSelecionadas.substitutosArroz && renderTabelaRows('arroz', tabelaArroz, alvosTabelas.substitutosArroz)}
+              </div>
+
+              <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
+                  <label className="flex items-center gap-3 cursor-pointer flex-1">
+                    <input type="checkbox" checked={tabelasSelecionadas.feijao} onChange={() => toggleTabela('feijao')} className="w-5 h-5 text-emerald-600 rounded" />
+                    <span className="font-bold text-slate-800">Tabela 3: Substitutos de Leguminosas (Feijões)</span>
+                  </label>
+                  {tabelasSelecionadas.feijao && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-blue-700">Alvo CHO (g):</span>
+                      <input type="number" value={alvosTabelas.feijao} onChange={(e) => setAlvosTabelas({ ...alvosTabelas, feijao: e.target.value })} placeholder="Ex: 15" className="w-20 px-2 py-1 border border-slate-300 rounded text-sm outline-none focus:border-emerald-500" />
+                    </div>
+                  )}
+                </div>
+                {tabelasSelecionadas.feijao && renderTabelaRows('feijao', tabelaFeijao, alvosTabelas.feijao)}
               </div>
 
               <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
                 <div className="p-4 flex items-center gap-4 border-b border-slate-200 bg-white">
                   <label className="flex items-center gap-3 cursor-pointer flex-1">
                     <input type="checkbox" checked={tabelasSelecionadas.frutas} onChange={() => toggleTabela('frutas')} className="w-5 h-5 text-emerald-600 rounded" />
-                    <span className="font-bold text-slate-800">Tabela 3: Frutas</span>
+                    <span className="font-bold text-slate-800">Tabela 4: Frutas</span>
                   </label>
                   {tabelasSelecionadas.frutas && (
                     <div className="flex items-center gap-2">
@@ -1205,19 +1299,7 @@ function PrescricaoEditor() {
                     </div>
                   )}
                 </div>
-                {tabelasSelecionadas.frutas && (
-                  <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
-                    {tabelaFrutas.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border border-slate-200">
-                        <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId) => atualizarItemTabela('frutas', item.id, nome, macros, dbId)} />
-                        <div className="w-24 text-sm font-bold text-slate-700 bg-slate-100 border border-slate-200 py-1.5 text-center rounded">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro, item.porcao_padrao)}</div>
-                        <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.macrosReal)} className="p-1.5 text-slate-400 hover:text-emerald-600"><Pencil className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => removerItemTabela('frutas', item.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => adicionarItemTabela('frutas')} className="text-emerald-600 text-sm font-semibold flex items-center gap-1 mt-2 hover:underline"><Plus className="w-4 h-4"/> Adicionar Linha</button>
-                  </div>
-                )}
+                {tabelasSelecionadas.frutas && renderTabelaRows('frutas', tabelaFrutas, alvosTabelas.frutas)}
               </div>
             </div>
           )}
@@ -1359,18 +1441,23 @@ function PrescricaoEditor() {
               </div>
 
               {/* TABELAS DE EQUIVALENTES (Impressão) */}
-              {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.frutas) && (
+              {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.feijao || tabelasSelecionadas.frutas) && (
                 <div className="mt-10 break-before-auto">
+                  
                   {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
                     <div className="mb-8 break-inside-avoid">
                       <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
                       <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade / Peso</th></tr></thead>
+                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade / Peso</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaProteinas.map((item, idx) => item.nome ? (
-                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro, item.porcao_padrao)}</td></tr>
+                            <tr key={idx}>
+                              <td className="border border-black px-3 py-1">{item.nome}</td>
+                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro, item.porcao_padrao)}</td>
+                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
+                            </tr>
                           ) : null)}
-                          <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 italic">Ajustar (1 ovo = ~6g ptn)</td></tr>
+                          <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 text-center italic">Ajustar</td><td className="border border-black px-3 py-1 italic">1 ovo = ~6g ptn</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -1378,32 +1465,58 @@ function PrescricaoEditor() {
 
                   {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
                     <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
+                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz / Raízes (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
                       <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Quantidade Equivalente</th></tr></thead>
+                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade Equivalente</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaArroz.map((item, idx) => item.nome ? (
-                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro, item.porcao_padrao)}</td></tr>
+                            <tr key={idx}>
+                              <td className="border border-black px-3 py-1">{item.nome}</td>
+                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro, item.porcao_padrao)}</td>
+                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
+                            </tr>
                           ) : null)}
                         </tbody>
                       </table>
-                      <p className="text-[10pt] mt-1 font-bold text-gray-800">Feijão: as mesmas quantidades para ervilha, lentilha ou grão-de-bico (60g)</p>
+                    </div>
+                  )}
+
+                  {tabelasSelecionadas.feijao && alvosTabelas.feijao && (
+                    <div className="mb-8 break-inside-avoid">
+                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Substitutos de Leguminosas / Feijões (aprox. {alvosTabelas.feijao}g Carboidratos)</p>
+                      <table className="w-full border-collapse border border-black text-[10.5pt]">
+                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade Equivalente</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
+                        <tbody>
+                          {tabelaFeijao.map((item, idx) => item.nome ? (
+                            <tr key={idx}>
+                              <td className="border border-black px-3 py-1">{item.nome}</td>
+                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.feijao, item.baseMacro, item.porcao_padrao)}</td>
+                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
+                            </tr>
+                          ) : null)}
+                        </tbody>
+                      </table>
                     </div>
                   )}
 
                   {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
                     <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
+                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 4: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
                       <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Peso / Quantidade</th></tr></thead>
+                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade / Peso</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaFrutas.map((item, idx) => item.nome ? (
-                            <tr key={idx}><td className="border border-black px-3 py-1">{item.nome}</td><td className="border border-black px-3 py-1">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro, item.porcao_padrao)}</td></tr>
+                            <tr key={idx}>
+                              <td className="border border-black px-3 py-1">{item.nome}</td>
+                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro, item.porcao_padrao)}</td>
+                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
+                            </tr>
                           ) : null)}
                         </tbody>
                       </table>
                     </div>
                   )}
+
                 </div>
               )}
             </td>

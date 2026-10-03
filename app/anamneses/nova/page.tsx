@@ -7,11 +7,15 @@ import { AnamneseFormData } from '@/types/database.types';
 import { usePacientes } from '@/hooks/useDatabase';
 import { PageHeader, Alert, FormInput, FormTextarea, FormSelect } from '@/components';
 
+// Estendemos a tipagem original para incluir a idade sem quebrar o resto do sistema
+type ExtendedAnamneseData = AnamneseFormData & { idade?: number };
+
 export default function NovaAnamnese() {
   const { pacientes, loading: loadingPacientes } = usePacientes();
 
-  const [formData, setFormData] = useState<AnamneseFormData>({
+  const [formData, setFormData] = useState<ExtendedAnamneseData>({
     paciente_id: '',
+    idade: undefined,
     altura: undefined,
     peso_atual: undefined,
     peso_historico: undefined,
@@ -41,7 +45,7 @@ export default function NovaAnamnese() {
     const { name, value } = e.target;
 
     // Converter valores numéricos para número
-    if (['altura', 'peso_atual', 'peso_historico', 'peso_desejado'].includes(name)) {
+    if (['idade', 'altura', 'peso_atual', 'peso_historico', 'peso_desejado'].includes(name)) {
       setFormData((prev) => ({
         ...prev,
         [name]: value ? parseFloat(value) : undefined,
@@ -54,13 +58,8 @@ export default function NovaAnamnese() {
     }
   };
 
-  // Validar formulário
+  // Validar formulário (Agora NENHUM campo é obrigatório, apenas checa se os valores digitados fazem sentido)
   const validarFormulario = (): boolean => {
-    if (!formData.paciente_id) {
-      setError('Por favor, selecione um paciente');
-      return false;
-    }
-
     // Validar pesos se preenchidos
     if (formData.peso_atual && (formData.peso_atual < 20 || formData.peso_atual > 300)) {
       setError('Peso atual deve estar entre 20 e 300 kg');
@@ -83,6 +82,12 @@ export default function NovaAnamnese() {
       return false;
     }
 
+    // Validar idade se preenchida
+    if (formData.idade && (formData.idade < 0 || formData.idade > 130)) {
+      setError('Idade inválida');
+      return false;
+    }
+
     return true;
   };
 
@@ -100,7 +105,8 @@ export default function NovaAnamnese() {
 
       // Preparar dados para insert (remover campos undefined)
       const dataToInsert = {
-        paciente_id: formData.paciente_id,
+        ...(formData.paciente_id && { paciente_id: formData.paciente_id }),
+        ...(formData.idade && { idade: formData.idade }),
         ...(formData.altura && { altura: formData.altura }),
         ...(formData.peso_atual && { peso_atual: formData.peso_atual }),
         ...(formData.peso_historico && { peso_historico: formData.peso_historico }),
@@ -126,9 +132,11 @@ export default function NovaAnamnese() {
       if (insertError) throw insertError;
 
       setSuccess(true);
+      
       // Limpar formulário
       setFormData({
         paciente_id: '',
+        idade: undefined,
         altura: undefined,
         peso_atual: undefined,
         peso_historico: undefined,
@@ -200,7 +208,7 @@ export default function NovaAnamnese() {
               name="paciente_id"
               value={formData.paciente_id}
               onChange={handleInputChange}
-              label="Selecione o Paciente *"
+              label="Selecione o Paciente"
               options={pacientes.map((p) => ({
                 value: p.id,
                 label: p.nome_completo,
@@ -217,6 +225,20 @@ export default function NovaAnamnese() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Idade */}
+              <FormInput
+                type="number"
+                name="idade"
+                value={formData.idade?.toString() || ''}
+                onChange={handleInputChange}
+                label="Idade"
+                placeholder="Ex: 35"
+                min="0"
+                max="130"
+                helperText="Idade do paciente em anos"
+                disabled={loading}
+              />
+
               {/* Altura */}
               <FormInput
                 type="number"
@@ -454,7 +476,7 @@ export default function NovaAnamnese() {
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-3 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-emerald-400 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-3 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-emerald-400 flex items-center gap-2"
             >
               {loading ? (
                 <>
@@ -472,7 +494,7 @@ export default function NovaAnamnese() {
           {/* Info Box */}
           <Alert
             type="info"
-            message="💡 Dica: Preencha os dados com cuidado. A anamnese será fundamental para o plano alimentar. Campos sem asterisco são opcionais."
+            message="💡 Dica: Agora todos os campos são opcionais. Você pode preencher apenas o que for relevante no momento do atendimento."
           />
         </form>
       </div>

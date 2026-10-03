@@ -218,15 +218,19 @@ export default function DetalhesPaciente() {
             </div>
           </div>
 
-          {/* SESSÃO: HISTÓRICO DE CONSULTAS */}
+          {/* SESSÃO: HISTÓRICO DE CONSULTAS E ANAMNESES */}
           <div className="mb-14">
             <div className="flex items-center justify-between border-b-2 border-slate-100 pb-4 mb-6">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <FileText className="w-6 h-6 text-blue-600" /> Consultas e Anamnese
               </h2>
-              <button className="text-sm font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+              {/* === BOTAO CORRIGIDO PARA USAR LINK PARA A PAGINA NOVA ANAMNESE === */}
+              <Link 
+                href={`/anamneses/nova?pacienteId=${paciente.id}`}
+                className="text-sm font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+              >
                 <Plus className="w-4 h-4" /> Novo Registro
-              </button>
+              </Link>
             </div>
             <div className="py-8 flex flex-col items-center justify-center text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
               <FileText className="w-8 h-8 text-slate-300 mb-2" />

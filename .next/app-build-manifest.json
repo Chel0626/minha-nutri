@@ -26,6 +26,11 @@
       "static/chunks/main-app.js",
       "static/chunks/app/prescricoes/nova/page.js"
     ],
+    "/anamneses/nova/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/anamneses/nova/page.js"
+    ],
     "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
