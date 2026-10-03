@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
-import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe, Wand2, Bold, Italic, Underline } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe, Wand2, Bold, Italic, Underline, Download, Save } from 'lucide-react';
 import BuscaAlimento from '@/components/BuscaAlimento';
 
 import html2canvas from 'html2canvas';
@@ -40,20 +40,17 @@ interface MetadadosPrescricion {
 
 const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
-// --- CALCULADORA DE MACROS TOTAIS ---
 const calcularTotalMacros = (opcao?: Opcao) => {
   let total = { cho: 0, ptn: 0, lip: 0, kcal: 0 };
   if (!opcao || !opcao.itens) return { cho: '0.0', ptn: '0.0', lip: '0.0', kcal: '0' };
   
   opcao.itens.forEach(item => {
     if (item.conexao === 'ou') return;
-
     const qtdNum = parseQtd(item.quantidade);
     if (qtdNum > 0 && item.baseMacros) {
       let bNum = 100;
       const mN = (item.porcao_padrao || '100g').match(/[\d.,]+/);
       if (mN) bNum = parseFloat(mN[0].replace(',', '.'));
-      
       if (bNum > 0) {
         total.cho += (item.baseMacros.cho * qtdNum) / bNum;
         total.ptn += (item.baseMacros.ptn * qtdNum) / bNum;
@@ -62,21 +59,17 @@ const calcularTotalMacros = (opcao?: Opcao) => {
     }
   });
   total.kcal = (total.cho * 4) + (total.ptn * 4) + (total.lip * 9);
-  
   return { cho: total.cho.toFixed(1), ptn: total.ptn.toFixed(1), lip: total.lip.toFixed(1), kcal: Math.round(total.kcal).toString() };
 };
 
-// --- CALCULADORA INTELIGENTE DE MEDIDAS CASEIRAS ---
 const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
   const qtd = parseQtd(qtdStr);
   if (qtd <= 0) return [];
-
   let sugestoes = [];
 
   if (pesoUnitario && pesoUnitario > 0) {
      let calc = qtd / pesoUnitario;
      let textoQtd = '';
-     
      if (pesoUnitario <= 30) {
         calc = Math.round(calc);
         if (calc > 0) {
@@ -93,7 +86,6 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
            else if (calc === 2.5) textoQtd = '2 e 1/2';
            else if (calc === 3.5) textoQtd = '3 e 1/2';
            else if (calc === 4.5) textoQtd = '4 e 1/2';
-
            const nomeMedida = calc <= 1 ? 'unidade' : 'unidades';
            sugestoes.push({ texto: `${textoQtd} ${nomeMedida} (aprox. ${pesoUnitario}g cada)`, base: pesoUnitario });
         }
@@ -118,14 +110,12 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
      let calc = qtd / b.base;
      calc = Math.round(calc * 2) / 2; 
      if (calc <= 0) return null;
-     
      let textoQtd = calc.toString();
      if (calc === 0.5) textoQtd = '1/2';
      else if (calc === 1.5) textoQtd = '1 e 1/2';
      else if (calc === 2.5) textoQtd = '2 e 1/2';
      else if (calc === 3.5) textoQtd = '3 e 1/2';
      else if (calc === 4.5) textoQtd = '4 e 1/2';
-
      const nomeMedida = calc <= 1 ? b.sing : b.plur;
      return { texto: `${textoQtd} ${nomeMedida}`, base: b.base };
   }).filter(Boolean) as { texto: string, base: number }[];
@@ -136,7 +126,16 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
 const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
 const TABELA_ARROZ = [ { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 }, { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 }, { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 }, { nome: 'Milho-verde (enlatado)', base: 17.1 } ];
 const TABELA_FRUTAS = [ { nome: 'Abacaxi', base: 12.3 }, { nome: 'Banana Prata', base: 26.0 }, { nome: 'Goiaba', base: 13.0 }, { nome: 'Laranja', base: 8.9 }, { nome: 'Mamão', base: 11.6 }, { nome: 'Manga', base: 15.0 }, { nome: 'Maçã', base: 15.2 }, { nome: 'Melancia', base: 6.8 }, { nome: 'Melão', base: 7.5 }, { nome: 'Morango', base: 6.8 }, { nome: 'Uva', base: 17.3 } ];
-const TABELA_FEIJAO = [ { nome: 'Feijão carioca (cozido)', base: 13.6 }, { nome: 'Feijão preto (cozido)', base: 14.0 }, { nome: 'Lentilha (cozida)', base: 16.3 }, { nome: 'Grão-de-bico (cozido)', base: 21.2 }, { nome: 'Ervilha em grãos (cozida)', base: 14.2 } ];
+
+// NOVA TABELA DE LEGUMINOSAS LIMPA
+const TABELA_FEIJAO = [ 
+  { nome: 'Feijão carioca (cozido)', base: 13.6 }, 
+  { nome: 'Feijão preto (cozido)', base: 14.0 }, 
+  { nome: 'Lentilha (cozida)', base: 16.3 }, 
+  { nome: 'Grão-de-bico (cozido)', base: 21.2 }, 
+  { nome: 'Ervilha (cozida)', base: 14.2 },
+  { nome: 'Soja (cozida)', base: 13.8 } 
+];
 
 function PrescricaoEditor() {
   const { pacientes } = usePacientes();
@@ -144,18 +143,21 @@ function PrescricaoEditor() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // PARÂMETROS DA URL E MODOS DE TELA
   const editId = searchParams?.get('editId');
   const pacienteQueryId = searchParams?.get('pacienteId');
+  const templateId = searchParams?.get('templateId');
+  const isNewTemplate = searchParams?.get('isTemplate') === 'true';
+  const isTemplateMode = !!templateId || isNewTemplate;
 
   const dataAtual = new Date().toLocaleDateString('pt-BR');
   const [metadados, setMetadados] = useState<MetadadosPrescricion>({ 
-    pacienteId: '', 
-    pacienteNome: '', 
-    faseCaloricas: '', 
-    dataPrescricao: dataAtual,
+    pacienteId: '', pacienteNome: '', faseCaloricas: '', dataPrescricao: dataAtual,
     tituloDistribuicao: 'Distribuição dos carboidratos por refeição:',
     tituloFormatacao: { bold: false, italic: false, underline: false, size: 12 }
   });
+  
+  const [nomeTemplateAtual, setNomeTemplateAtual] = useState('');
   const [tabelasColapsadas, setTabelasColapsadas] = useState(true);
 
   const [blocos, setBlocos] = useState<Bloco[]>([{
@@ -174,12 +176,19 @@ function PrescricaoEditor() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sucessoMsg, setSucessoMsg] = useState('Salvo com sucesso!');
 
   const [medidaDropdownAberto, setMedidaDropdownAberto] = useState<string | null>(null);
   const [medidaDropdownTabelaAberto, setMedidaDropdownTabelaAberto] = useState<string | null>(null);
   const [modalEdicao, setModalEdicao] = useState({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '' });
   const [salvandoAlimento, setSalvandoAlimento] = useState(false);
   const caloriasCalculadas = (parseFloat(modalEdicao.cho) || 0) * 4 + (parseFloat(modalEdicao.ptn) || 0) * 4 + (parseFloat(modalEdicao.lip) || 0) * 9;
+
+  // MODAIS DE TEMPLATE
+  const [modalImportarAberta, setModalImportarAberta] = useState(false);
+  const [modalSalvarTemplateAberta, setModalSalvarTemplateAberta] = useState(false);
+  const [templatesSalvos, setTemplatesSalvos] = useState<any[]>([]);
+  const [nomeNovoTemplate, setNomeNovoTemplate] = useState('');
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [certFile, setCertFile] = useState<File | null>(null);
@@ -193,11 +202,31 @@ function PrescricaoEditor() {
   useEffect(() => {
     if (editId) {
       carregarDietaSalva(editId);
+    } else if (templateId) {
+      carregarTemplate(templateId);
     } else if (pacienteQueryId && pacientes.length > 0) {
       const paciente = pacientes.find((p) => p.id === pacienteQueryId);
       setMetadados(prev => ({ ...prev, pacienteId: pacienteQueryId, pacienteNome: paciente?.nome_completo || '' }));
     }
-  }, [editId, pacienteQueryId, pacientes]);
+  }, [editId, templateId, pacienteQueryId, pacientes]);
+
+  const aplicarDadosEstruturados = (d: any) => {
+    setBlocos(d.blocos || []);
+    setTabelasSelecionadas(d.tabelasSelecionadas || { proteinas: false, substitutosArroz: false, frutas: false, feijao: false });
+    setAlvosTabelas(d.alvosTabelas || { proteinas: '', substitutosArroz: '', frutas: '', feijao: '' });
+    setTabelaProteinas(d.tabelaProteinas || TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
+    setTabelaArroz(d.tabelaArroz || TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+    setTabelaFrutas(d.tabelaFrutas || TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+    setTabelaFeijao(d.tabelaFeijao || TABELA_FEIJAO.map((t, i) => ({ id: `tfej-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+    
+    if (d.metadados) {
+      setMetadados(prev => ({
+        ...prev,
+        tituloDistribuicao: d.metadados.tituloDistribuicao || 'Distribuição dos carboidratos por refeição:',
+        tituloFormatacao: d.metadados.tituloFormatacao || { bold: false, italic: false, underline: false, size: 12 }
+      }));
+    }
+  };
 
   const carregarDietaSalva = async (id: string) => {
     setLoading(true);
@@ -206,27 +235,61 @@ function PrescricaoEditor() {
       if (error) throw error;
 
       if (data && data.dados_estruturados) {
-        const d = data.dados_estruturados;
-        setBlocos(d.blocos || []);
-        setTabelasSelecionadas(d.tabelasSelecionadas || { proteinas: false, substitutosArroz: false, frutas: false, feijao: false });
-        setAlvosTabelas(d.alvosTabelas || { proteinas: '', substitutosArroz: '', frutas: '', feijao: '' });
-        setTabelaProteinas(d.tabelaProteinas || TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
-        setTabelaArroz(d.tabelaArroz || TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-        setTabelaFrutas(d.tabelaFrutas || TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-        setTabelaFeijao(d.tabelaFeijao || TABELA_FEIJAO.map((t, i) => ({ id: `tfej-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-        
-        if (d.metadados) {
-          setMetadados({
-            ...d.metadados,
-            tituloDistribuicao: d.metadados.tituloDistribuicao || 'Distribuição dos carboidratos por refeição:',
-            tituloFormatacao: d.metadados.tituloFormatacao || { bold: false, italic: false, underline: false, size: 12 }
-          });
+        aplicarDadosEstruturados(data.dados_estruturados);
+        if (data.dados_estruturados.metadados) {
+           setMetadados(prev => ({ ...prev, pacienteId: data.dados_estruturados.metadados.pacienteId, pacienteNome: data.dados_estruturados.metadados.pacienteNome, dataPrescricao: data.dados_estruturados.metadados.dataPrescricao }));
         }
       } else {
-        alert("Aviso: Esta é uma prescrição antiga salva apenas em modo de leitura de texto.");
+        alert("Aviso: Esta é uma prescrição antiga salva apenas em modo de leitura.");
         setMetadados(prev => ({ ...prev, pacienteId: data.paciente_id }));
       }
     } catch (err) {} finally { setLoading(false); }
+  };
+
+  const carregarTemplate = async (id: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('templates_prescricao').select('*').eq('id', id).single();
+      if (error) throw error;
+      if (data && data.dados_estruturados) {
+        setNomeTemplateAtual(data.nome);
+        aplicarDadosEstruturados(data.dados_estruturados);
+      }
+    } catch (err) {} finally { setLoading(false); }
+  };
+
+  const abrirModalImportar = async () => {
+    setModalImportarAberta(true);
+    const { data } = await supabase.from('templates_prescricao').select('id, nome, created_at').order('nome');
+    setTemplatesSalvos(data || []);
+  };
+
+  const handleImportarTemplate = async (id: string) => {
+    try {
+      const { data } = await supabase.from('templates_prescricao').select('dados_estruturados').eq('id', id).single();
+      if (data && data.dados_estruturados) {
+        aplicarDadosEstruturados(data.dados_estruturados);
+        setModalImportarAberta(false);
+        setSucessoMsg('Template aplicado com sucesso!');
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      }
+    } catch (e) { alert("Erro ao importar template"); }
+  };
+
+  const handleSalvarComoNovoTemplate = async () => {
+    if (!nomeNovoTemplate.trim()) return alert("Digite um nome para o template.");
+    setLoading(true);
+    try {
+      const payloadDados = { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, tabelaFeijao, metadados: { tituloDistribuicao: metadados.tituloDistribuicao, tituloFormatacao: metadados.tituloFormatacao } };
+      await supabase.from('templates_prescricao').insert([{ nome: nomeNovoTemplate, dados_estruturados: payloadDados }]);
+      setModalSalvarTemplateAberta(false);
+      setNomeNovoTemplate('');
+      setSucessoMsg('Template salvo com sucesso!');
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e) { alert("Erro ao salvar template"); }
+    setLoading(false);
   };
 
   const configsPorCategoria = preConfigs.reduce((acc, config: PreConfiguracao) => {
@@ -452,7 +515,7 @@ function PrescricaoEditor() {
 
       const atualizarLinhasTabela = (linhas: ItemTabela[]) => linhas.map(t => {
         if (t.dbId === modalEdicao.id || t.nome === modalEdicao.nome) {
-          const baseMacroUpdate = t.nome.toLowerCase().includes('arroz') || t.nome.toLowerCase().includes('fruta') || t.nome.toLowerCase().includes('feij') || t.nome.toLowerCase().includes('lentilha') || t.nome.toLowerCase().includes('grão') ? newMacros.cho : newMacros.ptn;
+          const baseMacroUpdate = t.nome.toLowerCase().includes('arroz') || t.nome.toLowerCase().includes('fruta') || t.nome.toLowerCase().includes('feij') || t.nome.toLowerCase().includes('lentilha') || t.nome.toLowerCase().includes('grão') || t.nome.toLowerCase().includes('soja') || t.nome.toLowerCase().includes('ervilha') ? newMacros.cho : newMacros.ptn;
           return { ...t, nome: dadosSalvar.nome_exibicao, baseMacro: baseMacroUpdate, macrosReal: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, peso_unitario: dadosSalvar.peso_unitario || undefined };
         }
         return t;
@@ -528,32 +591,42 @@ function PrescricaoEditor() {
     return txt;
   };
 
-  const handleSalvarPrescricao = async (e: React.FormEvent) => {
+  const handleSalvarGeral = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!metadados.pacienteId) { setError('Por favor, selecione um paciente no cabeçalho.'); return; }
-
     try {
       setLoading(true);
       
-      const payload = {
-        paciente_id: metadados.pacienteId,
-        cardapio_texto: gerarTextoPrescricao(),
-        orientacoes_selecionadas: [],
-        dados_estruturados: { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, tabelaFeijao, metadados }
-      };
+      const payloadDados = { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, tabelaFeijao, metadados: { tituloDistribuicao: metadados.tituloDistribuicao, tituloFormatacao: metadados.tituloFormatacao } };
 
-      if (editId) {
-        const { error: updateError } = await supabase.from('prescricoes').update(payload).eq('id', editId);
-        if (updateError) throw updateError;
+      if (isTemplateMode) {
+         if (!nomeTemplateAtual.trim()) { setError('Dê um nome para o seu template no topo da página.'); setLoading(false); return; }
+         const payload = { nome: nomeTemplateAtual, dados_estruturados: payloadDados };
+         if (templateId) {
+            await supabase.from('templates_prescricao').update(payload).eq('id', templateId);
+         } else {
+            await supabase.from('templates_prescricao').insert([payload]);
+         }
+         setSucessoMsg('Template salvo com sucesso!');
       } else {
-        const { error: insertError } = await supabase.from('prescricoes').insert([payload]);
-        if (insertError) throw insertError;
+         if (!metadados.pacienteId) { setError('Por favor, selecione um paciente no cabeçalho.'); setLoading(false); return; }
+         const payload = {
+           paciente_id: metadados.pacienteId,
+           cardapio_texto: gerarTextoPrescricao(),
+           orientacoes_selecionadas: [],
+           dados_estruturados: { ...payloadDados, metadados }
+         };
+         if (editId) {
+           await supabase.from('prescricoes').update(payload).eq('id', editId);
+         } else {
+           await supabase.from('prescricoes').insert([payload]);
+         }
+         setSucessoMsg('Dieta salva com sucesso!');
       }
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err) { setError(err instanceof Error ? err.message : 'Erro ao salvar prescrição'); } 
+    } catch (err) { setError('Erro ao salvar os dados.'); } 
     finally { setLoading(false); }
   };
 
@@ -851,7 +924,7 @@ function PrescricaoEditor() {
       {/* TOASTS DE NOTIFICAÇÃO FLUTUANTES */}
       {success && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold animate-in fade-in slide-in-from-top-4 print:hidden">
-          <Check className="w-5 h-5" /> Prescrição {editId ? 'atualizada' : 'salva'} com sucesso!
+          <Check className="w-5 h-5" /> {sucessoMsg}
         </div>
       )}
       {error && (
@@ -863,18 +936,32 @@ function PrescricaoEditor() {
       {/* HEADER DE NAVEGAÇÃO */}
       <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href={`/pacientes/${metadados.pacienteId || ''}`} className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
+          <button onClick={() => router.back()} className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
             ← Voltar
-          </Link>
-          <div className="flex items-center gap-3">
-            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition text-sm">
-              <Printer className="w-4 h-4" /> Imprimir 
-            </button>
-            <button onClick={() => setIsSignModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition shadow-sm text-sm">
-              <FileSignature className="w-4 h-4" /> Assinar PDF
-            </button>
-            <button onClick={handleSalvarPrescricao} disabled={loading} className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:bg-slate-400 transition text-sm shadow-sm">
-              {loading ? 'Salvando...' : (editId ? 'Atualizar Dieta' : 'Salvar Dieta')}
+          </button>
+          <div className="flex items-center gap-2">
+            
+            {/* Botões extras se não estiver no modo de criar template do zero */}
+            {!isTemplateMode && (
+              <>
+                <button onClick={abrirModalImportar} className="flex items-center gap-2 px-3 py-2 border border-blue-200 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 font-medium transition text-sm">
+                  <Download className="w-4 h-4" /> Importar Template
+                </button>
+                <button onClick={() => setModalSalvarTemplateAberta(true)} className="flex items-center gap-2 px-3 py-2 border border-amber-200 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 font-medium transition text-sm hidden md:flex">
+                  <Save className="w-4 h-4" /> Salvar como Template
+                </button>
+                <div className="w-px h-6 bg-slate-300 mx-1 hidden sm:block"></div>
+                <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition text-sm">
+                  <Printer className="w-4 h-4" /> Imprimir 
+                </button>
+                <button onClick={() => setIsSignModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 font-medium transition shadow-sm text-sm">
+                  <FileSignature className="w-4 h-4" /> Assinar PDF
+                </button>
+              </>
+            )}
+
+            <button onClick={handleSalvarGeral} disabled={loading} className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 disabled:bg-slate-400 transition text-sm shadow-sm ml-1">
+              {loading ? 'Salvando...' : (isTemplateMode ? (templateId ? 'Atualizar Template' : 'Criar Template') : (editId ? 'Atualizar Dieta' : 'Salvar Dieta'))}
             </button>
           </div>
         </div>
@@ -887,27 +974,48 @@ function PrescricaoEditor() {
           
           <div className="mb-10 text-slate-800">
             <div className="flex justify-between items-end mb-4">
-              <div>
-                <h1 className="text-[15pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</h1>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[13pt] text-[#1e3a8a]">Paciente:</span>
-                  <select value={metadados.pacienteId} onChange={handlePacienteChange} className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300 cursor-pointer">
-                    <option value="">Selecione...</option>
-                    {pacientes.map((p) => <option key={p.id} value={p.id}>{p.nome_completo}</option>)}
-                  </select>
+              {isTemplateMode ? (
+                <div className="flex-1 mr-8">
+                  <h1 className="text-[15pt] text-[#1e3a8a] font-normal tracking-wide">Editor de Template</h1>
+                  <div className="flex items-center gap-2 mt-2 w-full">
+                    <span className="text-[13pt] text-[#1e3a8a] shrink-0">Nome do Template:</span>
+                    <input 
+                      type="text" 
+                      value={nomeTemplateAtual} 
+                      onChange={e => setNomeTemplateAtual(e.target.value)} 
+                      placeholder="Ex: Dieta Emagrecimento 1800kcal" 
+                      className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-slate-300 focus:border-[#1e3a8a] w-full max-w-md transition-colors" 
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <h1 className="text-[15pt] text-[#1e3a8a] font-normal tracking-wide">Nutrição e Educação em Diabetes</h1>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[13pt] text-[#1e3a8a]">Paciente:</span>
+                    <select value={metadados.pacienteId} onChange={handlePacienteChange} className="text-[13pt] font-bold text-[#1e3a8a] outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300 cursor-pointer">
+                      <option value="">Selecione...</option>
+                      {pacientes.map((p) => <option key={p.id} value={p.id}>{p.nome_completo}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+              
               <img src="/logo.jpg" alt="Logo Carolina Macedo" className="w-36 h-36 object-contain" />
             </div>
             
             <hr className="border-t border-dashed border-black my-4 w-full" />
             
-            <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
-            <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[11pt] text-[#1e3a8a]">Data:</span>
-              <input type="text" value={metadados.dataPrescricao} onChange={handleDataChange} className="text-[11pt] text-[#1e3a8a] w-32 outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300" />
-            </div>
+            {!isTemplateMode && (
+              <>
+                <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
+                <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[11pt] text-[#1e3a8a]">Data:</span>
+                  <input type="text" value={metadados.dataPrescricao} onChange={handleDataChange} className="text-[11pt] text-[#1e3a8a] w-32 outline-none bg-transparent hover:bg-slate-50 border-b border-dashed border-transparent hover:border-slate-300" />
+                </div>
+              </>
+            )}
             
             {/* TÍTULO EDITÁVEL COM BARRA DE FORMATAÇÃO */}
             <div className="mt-8 mb-6 group relative">
@@ -1550,6 +1658,72 @@ function PrescricaoEditor() {
             <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3">
               <button onClick={() => setIsSignModalOpen(false)} disabled={isSigning} className="px-4 py-2 font-medium">Cancelar</button>
               <button onClick={handleAssinar} disabled={isSigning} className="px-6 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">{isSigning ? <><Loader2 className="w-4 h-4 animate-spin" /> Assinando...</> : 'Assinar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE IMPORTAR TEMPLATE */}
+      {modalImportarAberta && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+              <h3 className="text-lg font-bold flex items-center gap-2 text-slate-800"><Download className="w-5 h-5 text-blue-600" /> Importar Template</h3>
+              <button onClick={() => setModalImportarAberta(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <p className="text-sm text-slate-500 mb-4">Selecione um template salvo para preencher esta dieta automaticamente. <b>Aviso: Isso irá sobrescrever a dieta atual.</b></p>
+              
+              {templatesSalvos.length === 0 ? (
+                <div className="p-4 bg-slate-50 text-center rounded border border-dashed border-slate-200">
+                  <p className="text-slate-500 text-sm">Nenhum template salvo ainda.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {templatesSalvos.map(t => (
+                    <button 
+                      key={t.id} 
+                      onClick={() => handleImportarTemplate(t.id)} 
+                      className="w-full text-left p-4 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors group"
+                    >
+                      <h4 className="font-bold text-slate-800 group-hover:text-blue-700">{t.nome}</h4>
+                      <p className="text-xs text-slate-400 mt-1">Salvo em: {new Date(t.created_at).toLocaleDateString('pt-BR')}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SALVAR COMO NOVO TEMPLATE */}
+      {modalSalvarTemplateAberta && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+              <h3 className="text-lg font-bold flex items-center gap-2 text-slate-800"><Save className="w-5 h-5 text-amber-600" /> Salvar como Template</h3>
+              <button onClick={() => setModalSalvarTemplateAberta(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-500">Salve esta dieta como um template para usá-la rapidamente com outros pacientes no futuro.</p>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-slate-700">Nome do Template</label>
+                <input 
+                  type="text" 
+                  value={nomeNovoTemplate} 
+                  onChange={e => setNomeNovoTemplate(e.target.value)} 
+                  placeholder="Ex: Emagrecimento 1800kcal" 
+                  className="w-full px-4 py-2 border border-slate-300 rounded focus:border-amber-500 outline-none" 
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3">
+              <button onClick={() => setModalSalvarTemplateAberta(false)} className="px-4 py-2 font-medium text-slate-600">Cancelar</button>
+              <button onClick={handleSalvarComoNovoTemplate} disabled={!nomeNovoTemplate.trim() || loading} className="px-6 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 disabled:opacity-50">
+                {loading ? 'Salvando...' : 'Salvar Template'}
+              </button>
             </div>
           </div>
         </div>

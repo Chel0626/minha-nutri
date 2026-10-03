@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, FileText, Settings, ClipboardList, ChevronRight } from 'lucide-react';
+import { Users, FileText, Settings, ClipboardList, ChevronRight, LayoutTemplate } from 'lucide-react';
 
 export default function Dashboard() {
   return (
@@ -15,7 +15,7 @@ export default function Dashboard() {
         </div>
 
         {/* Grid de Acesso Rápido */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
           {/* Card: Pacientes */}
           <Link href="/pacientes" className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all">
@@ -31,7 +31,7 @@ export default function Dashboard() {
             </p>
           </Link>
 
-          {/* Card: Anamneses (NOVO / CORRIGIDO) */}
+          {/* Card: Anamneses */}
           <Link href="/anamneses/nova" className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all">
             <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <ClipboardList className="w-6 h-6 text-indigo-600" />
@@ -56,6 +56,20 @@ export default function Dashboard() {
             </h2>
             <p className="text-slate-600 text-sm">
               Histórico de dietas, geração de PDFs e novas prescrições.
+            </p>
+          </Link>
+
+          {/* Card: Templates de Dieta */}
+          <Link href="/templates" className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-200 transition-all">
+            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <LayoutTemplate className="w-6 h-6 text-purple-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 mb-2 flex items-center justify-between">
+              Templates de Dieta
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-purple-600 transition-colors" />
+            </h2>
+            <p className="text-slate-600 text-sm">
+              Criar e gerenciar bases prontas para acelerar a prescrição.
             </p>
           </Link>
 
