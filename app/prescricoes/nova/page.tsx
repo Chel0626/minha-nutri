@@ -6,45 +6,36 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePacientes, usePreConfiguracoes } from '@/hooks/useDatabase';
 import { Paciente, PreConfiguracao } from '@/types/database.types';
-import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe, Wand2, Bold, Italic, Underline, Download, Save } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Check, Printer, FileSignature, X, Loader2, Pencil, ArrowUp, ArrowDown, Type, ListChecks, Utensils, AlignLeft, GripVertical, Target, Smartphone, Mail, Globe, Wand2, Bold, Italic, Underline, Download, Save, Search } from 'lucide-react';
 import BuscaAlimento from '@/components/BuscaAlimento';
 
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 interface ItemAlimento { 
-  id: string; 
-  dbId?: string; 
-  nome: string; 
-  quantidade: string; 
-  medida_caseira?: string; 
-  baseMacros?: { cho: number; ptn: number; lip: number }; 
-  macroAtivo?: 'cho' | 'ptn' | 'lip' | null; 
-  macroAlvo?: string; 
-  conexao?: 'nova_linha' | 'mais' | 'ou'; 
-  porcao_padrao?: string; 
-  peso_unitario?: number; 
-  medidas_customizadas?: { nome: string, peso_g: number }[];
+  id: string; dbId?: string; nome: string; quantidade: string; medida_caseira?: string; 
+  baseMacros?: { cho: number; ptn: number; lip: number }; macroAtivo?: 'cho' | 'ptn' | 'lip' | null; 
+  macroAlvo?: string; conexao?: 'nova_linha' | 'mais' | 'ou'; porcao_padrao?: string; 
+  peso_unitario?: number; medidas_customizadas?: { nome: string, peso_g: number }[];
 }
 interface Opcao { id: string; itens: ItemAlimento[]; }
 type TipoBloco = 'condutas' | 'refeicao' | 'texto_livre';
 interface Bloco { id: string; tipo: TipoBloco; nome?: string; metaCarboidratos?: string; mostrarMeta?: boolean; opcoes?: Opcao[]; titulo?: string; conteudoTexto: string; expandido?: boolean; colapsado?: boolean; }
 interface ItemTabela { id: string; dbId?: string; nome: string; baseMacro: number; macrosReal?: { cho: number; ptn: number; lip: number }; porcao_padrao?: string; peso_unitario?: number; medidas_customizadas?: { nome: string, peso_g: number }[]; medida_caseira?: string; }
 interface MetadadosPrescricion { 
-  pacienteId: string; 
-  pacienteNome: string; 
-  faseCaloricas: string; 
-  dataPrescricao: string;
-  tituloDistribuicao?: string; 
-  tituloFormatacao?: { bold: boolean; italic: boolean; underline: boolean; size: number };
+  pacienteId: string; pacienteNome: string; faseCaloricas: string; dataPrescricao: string;
+  tituloDistribuicao?: string; tituloFormatacao?: { bold: boolean; italic: boolean; underline: boolean; size: number };
 }
+
+type EditSourceContext = 
+  | { type: 'refeicao', blocoId: string, opcaoId: string, itemId: string } 
+  | { type: 'tabela', nomeTabela: 'proteinas' | 'arroz' | 'frutas' | 'feijao', id: string };
 
 const parseQtd = (str: string) => { const match = str.match(/[\d.,]+/); return match ? parseFloat(match[0].replace(',', '.')) : 0; };
 
 const calcularTotalMacros = (opcao?: Opcao) => {
   let total = { cho: 0, ptn: 0, lip: 0, kcal: 0 };
   if (!opcao || !opcao.itens) return { cho: '0.0', ptn: '0.0', lip: '0.0', kcal: '0' };
-  
   opcao.itens.forEach(item => {
     if (item.conexao === 'ou') return;
     const qtdNum = parseQtd(item.quantidade);
@@ -68,89 +59,54 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number, medidasCustom
   if (qtd <= 0) return [];
   let sugestoes: { texto: string, base: number }[] = [];
 
-  // 1. ADICIONA AS MEDIDAS CUSTOMIZADAS (A prioridade do nutricionista)
   if (medidasCustomizadas && medidasCustomizadas.length > 0) {
      medidasCustomizadas.forEach(mc => {
         let calc = qtd / mc.peso_g;
-        calc = Math.round(calc * 2) / 2; // Arredonda para 0.5
+        calc = Math.round(calc * 2) / 2; 
         if (calc > 0) {
            let textoQtd = calc.toString();
-           if (calc === 0.5) textoQtd = '1/2';
-           else if (calc === 1.5) textoQtd = '1 e 1/2';
-           else if (calc === 2.5) textoQtd = '2 e 1/2';
-           else if (calc === 3.5) textoQtd = '3 e 1/2';
-           else if (calc === 4.5) textoQtd = '4 e 1/2';
-
-           // Pluralizar o nome se necessário
+           if (calc === 0.5) textoQtd = '1/2'; else if (calc === 1.5) textoQtd = '1 e 1/2'; else if (calc === 2.5) textoQtd = '2 e 1/2'; else if (calc === 3.5) textoQtd = '3 e 1/2'; else if (calc === 4.5) textoQtd = '4 e 1/2';
            let nomeMedida = mc.nome;
            if (calc > 1) {
-              if (nomeMedida.toLowerCase() === 'colher de sopa') nomeMedida = 'colheres de sopa';
-              else if (nomeMedida.toLowerCase() === 'colher de sobremesa') nomeMedida = 'colheres de sobremesa';
-              else if (nomeMedida.toLowerCase() === 'colher de chá') nomeMedida = 'colheres de chá';
-              else if (nomeMedida.toLowerCase() === 'concha') nomeMedida = 'conchas';
-              else if (nomeMedida.toLowerCase() === 'escumadeira') nomeMedida = 'escumadeiras';
-              else if (nomeMedida.toLowerCase() === 'xícara') nomeMedida = 'xícaras';
+              if (nomeMedida.toLowerCase() === 'colher de sopa') nomeMedida = 'colheres de sopa'; else if (nomeMedida.toLowerCase() === 'colher de sobremesa') nomeMedida = 'colheres de sobremesa'; else if (nomeMedida.toLowerCase() === 'colher de chá') nomeMedida = 'colheres de chá'; else if (nomeMedida.toLowerCase() === 'concha') nomeMedida = 'conchas'; else if (nomeMedida.toLowerCase() === 'escumadeira') nomeMedida = 'escumadeiras'; else if (nomeMedida.toLowerCase() === 'xícara') nomeMedida = 'xícaras';
            }
-
            sugestoes.push({ texto: `${textoQtd} ${nomeMedida}`, base: mc.peso_g });
         }
      });
   }
 
-  // 2. ADICIONA A UNIDADE POR PESO (Se houver)
   if (pesoUnitario && pesoUnitario > 0) {
      let calc = qtd / pesoUnitario;
      let textoQtd = '';
      if (pesoUnitario <= 30) {
         calc = Math.round(calc);
         if (calc > 0) {
-           textoQtd = calc.toString();
-           const nomeMedida = calc <= 1 ? 'unidade' : 'unidades';
+           textoQtd = calc.toString(); const nomeMedida = calc <= 1 ? 'unidade' : 'unidades';
            sugestoes.push({ texto: `${textoQtd} ${nomeMedida} (aprox. ${pesoUnitario}g cada)`, base: pesoUnitario });
         }
      } else {
         calc = Math.round(calc * 2) / 2;
         if (calc > 0) {
            textoQtd = calc.toString();
-           if (calc === 0.5) textoQtd = '1/2';
-           else if (calc === 1.5) textoQtd = '1 e 1/2';
-           else if (calc === 2.5) textoQtd = '2 e 1/2';
-           else if (calc === 3.5) textoQtd = '3 e 1/2';
-           else if (calc === 4.5) textoQtd = '4 e 1/2';
+           if (calc === 0.5) textoQtd = '1/2'; else if (calc === 1.5) textoQtd = '1 e 1/2'; else if (calc === 2.5) textoQtd = '2 e 1/2'; else if (calc === 3.5) textoQtd = '3 e 1/2'; else if (calc === 4.5) textoQtd = '4 e 1/2';
            const nomeMedida = calc <= 1 ? 'unidade' : 'unidades';
            sugestoes.push({ texto: `${textoQtd} ${nomeMedida} (aprox. ${pesoUnitario}g cada)`, base: pesoUnitario });
         }
      }
   }
 
-  // 3. ADICIONA AS MEDIDAS GENÉRICAS DE VOLUME (Apenas as que não foram definidas no customizado)
   const nomesCustomizados = medidasCustomizadas?.map(m => m.nome.toLowerCase()) || [];
-  
   const bases = [
-    { nome: 'colher de café', sing: 'colher de café', plur: 'colheres de café', base: 2.5 },
-    { nome: 'colher de chá', sing: 'colher de chá', plur: 'colheres de chá', base: 5 },
-    { nome: 'colher de sobremesa', sing: 'colher de sobremesa', plur: 'colheres de sobremesa', base: 10 },
-    { nome: 'colher de sopa', sing: 'colher de sopa', plur: 'colheres de sopa', base: 15 },
-    { nome: 'colher de servir', sing: 'colher de servir', plur: 'colheres de servir', base: 30 },
-    { nome: 'escumadeira', sing: 'escumadeira', plur: 'escumadeiras', base: 30 },
-    { nome: 'concha', sing: 'concha média', plur: 'conchas médias', base: 100 },
-    { nome: 'xícara', sing: 'xícara de chá', plur: 'xícaras de chá', base: 150 },
-    { nome: 'fatia', sing: 'fatia média', plur: 'fatias médias', base: 30 },
-    { nome: 'copo', sing: 'copo', plur: 'copos', base: 200 }
+    { nome: 'colher de café', sing: 'colher de café', plur: 'colheres de café', base: 2.5 }, { nome: 'colher de chá', sing: 'colher de chá', plur: 'colheres de chá', base: 5 }, { nome: 'colher de sobremesa', sing: 'colher de sobremesa', plur: 'colheres de sobremesa', base: 10 }, { nome: 'colher de sopa', sing: 'colher de sopa', plur: 'colheres de sopa', base: 15 }, { nome: 'colher de servir', sing: 'colher de servir', plur: 'colheres de servir', base: 30 }, { nome: 'escumadeira', sing: 'escumadeira', plur: 'escumadeiras', base: 30 }, { nome: 'concha', sing: 'concha média', plur: 'conchas médias', base: 100 }, { nome: 'xícara', sing: 'xícara de chá', plur: 'xícaras de chá', base: 150 }, { nome: 'fatia', sing: 'fatia média', plur: 'fatias médias', base: 30 }, { nome: 'copo', sing: 'copo', plur: 'copos', base: 200 }
   ];
 
   const sugestoesVolume = bases.map(b => {
-     if (nomesCustomizados.includes(b.nome)) return null; // Ignora se o nutricionista já definiu o peso exato desta medida
-
+     if (nomesCustomizados.includes(b.nome)) return null; 
      let calc = qtd / b.base;
      calc = Math.round(calc * 2) / 2; 
      if (calc <= 0) return null;
      let textoQtd = calc.toString();
-     if (calc === 0.5) textoQtd = '1/2';
-     else if (calc === 1.5) textoQtd = '1 e 1/2';
-     else if (calc === 2.5) textoQtd = '2 e 1/2';
-     else if (calc === 3.5) textoQtd = '3 e 1/2';
-     else if (calc === 4.5) textoQtd = '4 e 1/2';
+     if (calc === 0.5) textoQtd = '1/2'; else if (calc === 1.5) textoQtd = '1 e 1/2'; else if (calc === 2.5) textoQtd = '2 e 1/2'; else if (calc === 3.5) textoQtd = '3 e 1/2'; else if (calc === 4.5) textoQtd = '4 e 1/2';
      const nomeMedida = calc <= 1 ? b.sing : b.plur;
      return { texto: `${textoQtd} ${nomeMedida}`, base: b.base };
   }).filter(Boolean) as { texto: string, base: number }[];
@@ -158,10 +114,11 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number, medidasCustom
   return [...sugestoes, ...sugestoesVolume];
 };
 
-const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
-const TABELA_ARROZ = [ { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 }, { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 }, { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 }, { nome: 'Milho-verde (enlatado)', base: 17.1 } ];
-const TABELA_FRUTAS = [ { nome: 'Abacaxi', base: 12.3 }, { nome: 'Banana Prata', base: 26.0 }, { nome: 'Goiaba', base: 13.0 }, { nome: 'Laranja', base: 8.9 }, { nome: 'Mamão', base: 11.6 }, { nome: 'Manga', base: 15.0 }, { nome: 'Maçã', base: 15.2 }, { nome: 'Melancia', base: 6.8 }, { nome: 'Melão', base: 7.5 }, { nome: 'Morango', base: 6.8 }, { nome: 'Uva', base: 17.3 } ];
-const TABELA_FEIJAO = [ { nome: 'Feijão carioca (cozido)', base: 13.6 }, { nome: 'Feijão preto (cozido)', base: 14.0 }, { nome: 'Lentilha (cozida)', base: 16.3 }, { nome: 'Grão-de-bico (cozido)', base: 21.2 }, { nome: 'Ervilha (cozida)', base: 14.2 }, { nome: 'Soja (cozida)', base: 13.8 } ];
+// TABELAS COM IDs REAIS DO BANCO DE DADOS
+const TABELA_PROTEINAS = [ { dbId: "276", nome: 'Peixe cozido ou grelhado', base: 27.6 }, { dbId: "273", nome: 'Abadejo, filé, congelado, assado', base: 23.5 }, { dbId: "277", nome: 'Atum, conserva em óleo', base: 26.2 } ];
+const TABELA_ARROZ = [ { dbId: "1", nome: 'Arroz integral', base: 25.0 }, { dbId: "129", nome: 'Mandioca, cozida', base: 30.1 }, { dbId: "102", nome: 'Cará cozido', base: 18.9 } ];
+const TABELA_FRUTAS = [ { dbId: "036b9f48-a060-4de8-a2f4-0eed95001272", nome: 'Melancia', base: 6.8 }, { dbId: "056d535a-db4f-4707-b80c-9449d2b7c0ad", nome: 'Abacaxi', base: 12.3 }, { dbId: "2088901b-fb59-414e-b2e6-4633950e81e5", nome: 'Mamão', base: 11.6 }, { dbId: "221dde40-36b0-4ef3-b98a-cb7a974f62f2", nome: 'Laranja', base: 8.9 }, { dbId: "1c079aa8-1e9c-4426-8c17-61a2e94b296d", nome: 'Melão', base: 7.5 } ];
+const TABELA_FEIJAO = [ { dbId: "020dd3f2-ca7e-4c40-8537-81084169f161", nome: 'Lentilha (cozida)', base: 16.3 } ];
 
 function PrescricaoEditor() {
   const { pacientes } = usePacientes();
@@ -169,12 +126,14 @@ function PrescricaoEditor() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // PARÂMETROS DA URL E MODOS DE TELA
   const editId = searchParams?.get('editId');
   const pacienteQueryId = searchParams?.get('pacienteId');
   const templateId = searchParams?.get('templateId');
   const isNewTemplate = searchParams?.get('isTemplate') === 'true';
   const isTemplateMode = !!templateId || isNewTemplate;
+
+  // CORREÇÃO: Guardar o ID em tempo real para não gerar dietas novas no banco a cada "Salvar Alterações"
+  const [currentPrescricaoId, setCurrentPrescricaoId] = useState<string | null>(null);
 
   const dataAtual = new Date().toLocaleDateString('pt-BR');
   const [metadados, setMetadados] = useState<MetadadosPrescricion>({ 
@@ -194,10 +153,10 @@ function PrescricaoEditor() {
   const [tabelasSelecionadas, setTabelasSelecionadas] = useState({ proteinas: false, substitutosArroz: false, frutas: false, feijao: false });
   const [alvosTabelas, setAlvosTabelas] = useState({ proteinas: '', substitutosArroz: '', frutas: '', feijao: '' });
 
-  const [tabelaProteinas, setTabelaProteinas] = useState<ItemTabela[]>(TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
-  const [tabelaArroz, setTabelaArroz] = useState<ItemTabela[]>(TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-  const [tabelaFrutas, setTabelaFrutas] = useState<ItemTabela[]>(TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-  const [tabelaFeijao, setTabelaFeijao] = useState<ItemTabela[]>(TABELA_FEIJAO.map((t, i) => ({ id: `tfej-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+  const [tabelaProteinas, setTabelaProteinas] = useState<ItemTabela[]>(TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, dbId: t.dbId, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
+  const [tabelaArroz, setTabelaArroz] = useState<ItemTabela[]>(TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, dbId: t.dbId, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+  const [tabelaFrutas, setTabelaFrutas] = useState<ItemTabela[]>(TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, dbId: t.dbId, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
+  const [tabelaFeijao, setTabelaFeijao] = useState<ItemTabela[]>(TABELA_FEIJAO.map((t, i) => ({ id: `tfej-${i}`, dbId: t.dbId, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -207,16 +166,17 @@ function PrescricaoEditor() {
   const [medidaDropdownAberto, setMedidaDropdownAberto] = useState<string | null>(null);
   const [medidaDropdownTabelaAberto, setMedidaDropdownTabelaAberto] = useState<string | null>(null);
   
-  // MODAL DE EDIÇÃO DE ALIMENTO E MEDIDAS CUSTOMIZADAS
-  const [modalEdicao, setModalEdicao] = useState<{isOpen: boolean, id: string, nome: string, cho: string, ptn: string, lip: string, porcao: string, pesoUnitario: string, medidasCustomizadas: {nome: string, peso_g: number}[]}>({ 
-    isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '', medidasCustomizadas: [] 
+  const [modalEdicao, setModalEdicao] = useState<{isOpen: boolean, id: string, nome: string, cho: string, ptn: string, lip: string, porcao: string, pesoUnitario: string, medidasCustomizadas: {nome: string, peso_g: number}[], source?: EditSourceContext}>({ 
+    isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '', medidasCustomizadas: [], source: undefined 
   });
   const [novaMedidaCaseira, setNovaMedidaCaseira] = useState({ nome: 'colher de sopa', macroRef: 'cho', valor: '' });
-  
   const [salvandoAlimento, setSalvandoAlimento] = useState(false);
+
+  const [buscandoWeb, setBuscandoWeb] = useState(false);
+  const [resultadosWeb, setResultadosWeb] = useState<any[]>([]);
+
   const caloriasCalculadas = (parseFloat(modalEdicao.cho) || 0) * 4 + (parseFloat(modalEdicao.ptn) || 0) * 4 + (parseFloat(modalEdicao.lip) || 0) * 9;
 
-  // MODAIS DE TEMPLATE
   const [modalImportarAberta, setModalImportarAberta] = useState(false);
   const [modalSalvarTemplateAberta, setModalSalvarTemplateAberta] = useState(false);
   const [templatesSalvos, setTemplatesSalvos] = useState<any[]>([]);
@@ -232,11 +192,12 @@ function PrescricaoEditor() {
   const [dragTarget, setDragTarget] = useState<string | null>(null);
 
   useEffect(() => {
-    if (editId) {
-      carregarDietaSalva(editId);
-    } else if (templateId) {
-      carregarTemplate(templateId);
-    } else if (pacienteQueryId && pacientes.length > 0) {
+    if (editId) { 
+      setCurrentPrescricaoId(editId);
+      carregarDietaSalva(editId); 
+    } 
+    else if (templateId) { carregarTemplate(templateId); } 
+    else if (pacienteQueryId && pacientes.length > 0) {
       const paciente = pacientes.find((p) => p.id === pacienteQueryId);
       setMetadados(prev => ({ ...prev, pacienteId: pacienteQueryId, pacienteNome: paciente?.nome_completo || '' }));
     }
@@ -246,15 +207,13 @@ function PrescricaoEditor() {
     setBlocos(d.blocos || []);
     setTabelasSelecionadas(d.tabelasSelecionadas || { proteinas: false, substitutosArroz: false, frutas: false, feijao: false });
     setAlvosTabelas(d.alvosTabelas || { proteinas: '', substitutosArroz: '', frutas: '', feijao: '' });
-    setTabelaProteinas(d.tabelaProteinas || TABELA_PROTEINAS.map((t, i) => ({ id: `tp-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: 0, ptn: t.base, lip: 0 }, porcao_padrao: '100g' })));
-    setTabelaArroz(d.tabelaArroz || TABELA_ARROZ.map((t, i) => ({ id: `ta-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-    setTabelaFrutas(d.tabelaFrutas || TABELA_FRUTAS.map((t, i) => ({ id: `tf-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-    setTabelaFeijao(d.tabelaFeijao || TABELA_FEIJAO.map((t, i) => ({ id: `tfej-${i}`, nome: t.nome, baseMacro: t.base, macrosReal: { cho: t.base, ptn: 0, lip: 0 }, porcao_padrao: '100g' })));
-    
+    if(d.tabelaProteinas) setTabelaProteinas(d.tabelaProteinas);
+    if(d.tabelaArroz) setTabelaArroz(d.tabelaArroz);
+    if(d.tabelaFrutas) setTabelaFrutas(d.tabelaFrutas);
+    if(d.tabelaFeijao) setTabelaFeijao(d.tabelaFeijao);
     if (d.metadados) {
       setMetadados(prev => ({
-        ...prev,
-        tituloDistribuicao: d.metadados.tituloDistribuicao || 'Distribuição dos carboidratos por refeição:',
+        ...prev, tituloDistribuicao: d.metadados.tituloDistribuicao || 'Distribuição dos carboidratos por refeição:',
         tituloFormatacao: d.metadados.tituloFormatacao || { bold: false, italic: false, underline: false, size: 12 }
       }));
     }
@@ -265,15 +224,11 @@ function PrescricaoEditor() {
     try {
       const { data, error } = await supabase.from('prescricoes').select('*').eq('id', id).single();
       if (error) throw error;
-
       if (data && data.dados_estruturados) {
         aplicarDadosEstruturados(data.dados_estruturados);
         if (data.dados_estruturados.metadados) {
            setMetadados(prev => ({ ...prev, pacienteId: data.dados_estruturados.metadados.pacienteId, pacienteNome: data.dados_estruturados.metadados.pacienteNome, dataPrescricao: data.dados_estruturados.metadados.dataPrescricao }));
         }
-      } else {
-        alert("Aviso: Esta é uma prescrição antiga salva apenas em modo de leitura.");
-        setMetadados(prev => ({ ...prev, pacienteId: data.paciente_id }));
       }
     } catch (err) {} finally { setLoading(false); }
   };
@@ -283,10 +238,7 @@ function PrescricaoEditor() {
     try {
       const { data, error } = await supabase.from('templates_prescricao').select('*').eq('id', id).single();
       if (error) throw error;
-      if (data && data.dados_estruturados) {
-        setNomeTemplateAtual(data.nome);
-        aplicarDadosEstruturados(data.dados_estruturados);
-      }
+      if (data && data.dados_estruturados) { setNomeTemplateAtual(data.nome); aplicarDadosEstruturados(data.dados_estruturados); }
     } catch (err) {} finally { setLoading(false); }
   };
 
@@ -303,8 +255,7 @@ function PrescricaoEditor() {
         aplicarDadosEstruturados(data.dados_estruturados);
         setModalImportarAberta(false);
         setSucessoMsg('Template aplicado com sucesso!');
-        setSuccess(true);
-        setTimeout(() => setSuccess(false), 3000);
+        setSuccess(true); setTimeout(() => setSuccess(false), 3000);
       }
     } catch (e) { alert("Erro ao importar template"); }
   };
@@ -315,11 +266,8 @@ function PrescricaoEditor() {
     try {
       const payloadDados = { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, tabelaFeijao, metadados: { tituloDistribuicao: metadados.tituloDistribuicao, tituloFormatacao: metadados.tituloFormatacao } };
       await supabase.from('templates_prescricao').insert([{ nome: nomeNovoTemplate, dados_estruturados: payloadDados }]);
-      setModalSalvarTemplateAberta(false);
-      setNomeNovoTemplate('');
-      setSucessoMsg('Template salvo com sucesso!');
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setModalSalvarTemplateAberta(false); setNomeNovoTemplate('');
+      setSucessoMsg('Template salvo com sucesso!'); setSuccess(true); setTimeout(() => setSuccess(false), 3000);
     } catch (e) { alert("Erro ao salvar template"); }
     setLoading(false);
   };
@@ -397,28 +345,20 @@ function PrescricaoEditor() {
         return { ...o, itens: o.itens.map(i => { 
           if (i.id !== itemId) return i; 
           let newQtd = i.quantidade; 
-          
           if (i.macroAtivo && i.baseMacros && valor !== '') { 
-            const target = parseFloat(valor); 
-            const base = i.baseMacros[i.macroAtivo]; 
+            const target = parseFloat(valor); const base = i.baseMacros[i.macroAtivo]; 
             if (base > 0 && !isNaN(target)) { 
               let baseNum = 100; let baseUnit = 'g';
               const porc = i.porcao_padrao || '100g';
               const matchNum = porc.match(/[\d.,]+/); const matchUnit = porc.match(/[a-zA-ZçÇãõáéíóú]+/i);
-              
               if (matchNum) baseNum = parseFloat(matchNum[0].replace(',', '.'));
               if (matchUnit) baseUnit = matchUnit[0].toLowerCase();
-
               let val = (target * baseNum) / base;
-
               if (baseUnit.startsWith('uni') || baseUnit.startsWith('u') || baseUnit.startsWith('fati')) val = Math.round(val * 2) / 2;
               else if (baseUnit === 'ml') val = Math.round(val / 5) * 5;
               else val = Math.round(val / 5) * 5;
-              
               newQtd = `${val}${baseUnit === 'g' || baseUnit === 'ml' ? baseUnit : ' ' + baseUnit}`;
-            } else if (base === 0) {
-              newQtd = '0';
-            } 
+            } else if (base === 0) { newQtd = '0'; } 
           } 
           return { ...i, macroAlvo: valor, quantidade: newQtd }; 
         }) }; 
@@ -469,7 +409,7 @@ function PrescricaoEditor() {
     return `${val}${baseUnit === 'g' || baseUnit === 'ml' ? baseUnit : ' ' + baseUnit}`; 
   };
 
-  const handleAbrirEdicao = async (dbId: string | undefined, nomeLocal: string, macrosLocal: any) => {
+  const handleAbrirEdicao = async (dbId: string | undefined, nomeLocal: string, macrosLocal: any, context: EditSourceContext) => {
     if (dbId && !dbId.startsWith('custom_')) {
       try {
         const { data, error } = await supabase.from('alimentos').select('*').eq('id', dbId).single();
@@ -477,49 +417,58 @@ function PrescricaoEditor() {
           setModalEdicao({
             isOpen: true, id: data.id, nome: data.nome_exibicao || data.nome,
             cho: String(data.cho || 0), ptn: String(data.ptn || 0), lip: String(data.lip || 0),
-            porcao: data.porcao_padrao || '100g',
-            pesoUnitario: data.peso_unitario ? String(data.peso_unitario) : '',
-            medidasCustomizadas: data.medidas_customizadas || []
+            porcao: data.porcao_padrao || '100g', pesoUnitario: data.peso_unitario ? String(data.peso_unitario) : '',
+            medidasCustomizadas: data.medidas_customizadas || [],
+            source: context
           });
           return;
         }
       } catch (err) {}
     }
-    setModalEdicao({
-      isOpen: true, id: dbId || '', nome: nomeLocal,
-      cho: String(macrosLocal?.cho || 0), ptn: String(macrosLocal?.ptn || 0), lip: String(macrosLocal?.lip || 0),
-      porcao: '100g',
-      pesoUnitario: '',
-      medidasCustomizadas: []
-    });
+    setModalEdicao({ isOpen: true, id: dbId || '', nome: nomeLocal, cho: String(macrosLocal?.cho || 0), ptn: String(macrosLocal?.ptn || 0), lip: String(macrosLocal?.lip || 0), porcao: '100g', pesoUnitario: '', medidasCustomizadas: [], source: context });
+  };
+
+  const handleBuscarNaWeb = async () => {
+    if (!modalEdicao.nome.trim()) { alert("Digite o nome do alimento antes de buscar na web."); return; }
+    setBuscandoWeb(true);
+    setResultadosWeb([]);
+    try {
+      const termo = encodeURIComponent(modalEdicao.nome);
+      const res = await fetch(`https://br.openfoodfacts.org/cgi/search.pl?search_terms=${termo}&search_simple=1&action=process&json=1`);
+      const data = await res.json();
+      if (data.products && data.products.length > 0) {
+        const validProducts = data.products.filter((p: any) => p.nutriments && (p.product_name_pt || p.product_name));
+        if (validProducts.length > 0) { setResultadosWeb(validProducts.slice(0, 8)); } 
+        else { alert("Produtos encontrados, mas nenhum contém tabela nutricional cadastrada no Open Food Facts."); }
+      } else { alert("Nenhum produto exato encontrado na base aberta. Tente um nome mais genérico."); }
+    } catch(e) { alert("Erro ao conectar com a base mundial de alimentos."); }
+    setBuscandoWeb(false);
+  };
+
+  const selecionarProdutoWeb = (prod: any) => {
+    const nomeProduto = prod.product_name_pt || prod.product_name;
+    const marca = prod.brands ? ` - ${prod.brands.split(',')[0]}` : '';
+    setModalEdicao(prev => ({
+      ...prev, nome: `${nomeProduto}${marca}`, cho: String(prod.nutriments?.carbohydrates_100g || 0),
+      ptn: String(prod.nutriments?.proteins_100g || 0), lip: String(prod.nutriments?.fat_100g || 0), porcao: '100g'
+    }));
+    setResultadosWeb([]);
   };
 
   const handleAddMedidaCustomizada = () => {
      const macroBaseG = parseFloat(modalEdicao[novaMedidaCaseira.macroRef as 'cho'|'ptn'|'lip']) || 0;
      const targetG = parseFloat(novaMedidaCaseira.valor);
-     
-     if (macroBaseG <= 0 || isNaN(targetG) || targetG <= 0) {
-        alert("Preencha corretamente os macros e o valor alvo. (Ex: O alimento precisa ter CHO > 0 para calcular a medida por CHO)");
-        return;
-     }
-
+     if (macroBaseG <= 0 || isNaN(targetG) || targetG <= 0) { alert("Preencha os macros por 100g do alimento e o valor alvo. (Ex: O alimento precisa ter CHO > 0 para calcular uma medida com alvo em CHO)"); return; }
      let baseNum = 100;
      const matchNum = modalEdicao.porcao.match(/[\d.,]+/);
      if (matchNum) baseNum = parseFloat(matchNum[0].replace(',', '.'));
-
-     // Regra de 3: Se baseNum(g) tem macroBaseG, quantos gramas tem targetG?
      const pesoDaMedida = (targetG * baseNum) / macroBaseG;
-
-     setModalEdicao(prev => ({
-        ...prev,
-        medidasCustomizadas: [...prev.medidasCustomizadas, { nome: novaMedidaCaseira.nome, peso_g: pesoDaMedida }]
-     }));
+     setModalEdicao(prev => ({ ...prev, medidasCustomizadas: [...prev.medidasCustomizadas, { nome: novaMedidaCaseira.nome, peso_g: pesoDaMedida }] }));
      setNovaMedidaCaseira({ ...novaMedidaCaseira, valor: '' });
   };
 
   const handleRemoverMedidaCustomizada = (index: number) => {
-     const novas = [...modalEdicao.medidasCustomizadas];
-     novas.splice(index, 1);
+     const novas = [...modalEdicao.medidasCustomizadas]; novas.splice(index, 1);
      setModalEdicao(prev => ({ ...prev, medidasCustomizadas: novas }));
   };
 
@@ -535,61 +484,72 @@ function PrescricaoEditor() {
         medidas_customizadas: modalEdicao.medidasCustomizadas
       };
       
-      if (modalEdicao.id && !modalEdicao.id.startsWith('custom_')) {
-        await supabase.from('alimentos').update(dadosSalvar).eq('id', modalEdicao.id);
+      let finalDbId = modalEdicao.id;
+
+      if (finalDbId && !finalDbId.startsWith('custom_') && finalDbId !== '') {
+        await supabase.from('alimentos').update(dadosSalvar).eq('id', finalDbId);
       } else {
-        const fakeId = `custom_${Date.now()}`;
-        await supabase.from('alimentos').insert([{ id: fakeId, ...dadosSalvar }]);
-        setModalEdicao(prev => ({ ...prev, id: fakeId }));
+        const { data, error } = await supabase.from('alimentos').insert([dadosSalvar]).select('id').single();
+        if (!error && data) { finalDbId = data.id; } 
+        else { finalDbId = `custom_${Date.now()}`; }
       }
 
       const newMacros = { cho: dadosSalvar.cho, ptn: dadosSalvar.ptn, lip: dadosSalvar.lip };
       
-      setBlocos(prevBlocos => prevBlocos.map(b => {
-        if (b.tipo !== 'refeicao') return b;
-        return {
-          ...b,
-          opcoes: b.opcoes?.map(o => ({
-            ...o,
-            itens: o.itens.map(i => {
-              if (i.dbId === modalEdicao.id || i.nome === modalEdicao.nome) {
-                let newQtd = i.quantidade;
-                if (i.macroAtivo && i.macroAlvo) {
-                   const t = parseFloat(i.macroAlvo);
-                   const base = newMacros[i.macroAtivo];
-                   if(base > 0 && !isNaN(t)) {
-                     let bn = 100; let bu = 'g';
-                     const mN = dadosSalvar.porcao_padrao.match(/[\d.,]+/);
-                     const mU = dadosSalvar.porcao_padrao.match(/[a-zA-ZçÇãõáéíóú]+/i);
-                     if (mN) bn = parseFloat(mN[0].replace(',','.'));
-                     if (mU) bu = mU[0].toLowerCase();
-                     let v = (t * bn) / base;
-                     if (bu.startsWith('u') || bu.startsWith('f')) v = Math.round(v * 2) / 2;
-                     else v = Math.round(v / 5) * 5;
-                     newQtd = `${v}${bu === 'g' || bu === 'ml' ? bu : ' '+bu}`;
-                   }
-                }
-                return { ...i, nome: dadosSalvar.nome_exibicao, baseMacros: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, quantidade: newQtd, peso_unitario: dadosSalvar.peso_unitario || undefined, medidas_customizadas: dadosSalvar.medidas_customizadas };
-              }
-              return i;
-            })
-          }))
-        };
-      }));
+      if (modalEdicao.source) {
+        if (modalEdicao.source.type === 'refeicao') {
+          const { blocoId, opcaoId, itemId } = modalEdicao.source;
+          setBlocos(prev => prev.map(b => {
+             if (b.id !== blocoId) return b;
+             return {
+               ...b,
+               opcoes: b.opcoes?.map(o => {
+                 if (o.id !== opcaoId) return o;
+                 return {
+                   ...o,
+                   itens: o.itens.map(i => {
+                     if (i.id === itemId) {
+                        let newQtd = i.quantidade;
+                        if (i.macroAtivo && i.macroAlvo) {
+                           const t = parseFloat(i.macroAlvo); const base = newMacros[i.macroAtivo];
+                           if(base > 0 && !isNaN(t)) {
+                             let bn = 100; let bu = 'g';
+                             const mN = dadosSalvar.porcao_padrao.match(/[\d.,]+/); const mU = dadosSalvar.porcao_padrao.match(/[a-zA-ZçÇãõáéíóú]+/i);
+                             if (mN) bn = parseFloat(mN[0].replace(',','.'));
+                             if (mU) bu = mU[0].toLowerCase();
+                             let v = (t * bn) / base;
+                             if (bu.startsWith('u') || bu.startsWith('f')) v = Math.round(v * 2) / 2; else v = Math.round(v / 5) * 5;
+                             newQtd = `${v}${bu === 'g' || bu === 'ml' ? bu : ' '+bu}`;
+                           }
+                        }
+                        return { ...i, dbId: finalDbId, nome: dadosSalvar.nome_exibicao, baseMacros: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, quantidade: newQtd, peso_unitario: dadosSalvar.peso_unitario || undefined, medidas_customizadas: dadosSalvar.medidas_customizadas };
+                     }
+                     return i;
+                   })
+                 };
+               })
+             };
+          }));
+        } else if (modalEdicao.source.type === 'tabela') {
+          const { nomeTabela, id: rowId } = modalEdicao.source;
+          // BUG DA MAÇÃ CORRIGIDO: Tabelas 2, 3 e 4 sempre focam em CHO. Tabela 1 em PTN.
+          const baseMacroUpdate = nomeTabela === 'proteinas' ? newMacros.ptn : newMacros.cho;
 
-      const atualizarLinhasTabela = (linhas: ItemTabela[]) => linhas.map(t => {
-        if (t.dbId === modalEdicao.id || t.nome === modalEdicao.nome) {
-          const baseMacroUpdate = t.nome.toLowerCase().includes('arroz') || t.nome.toLowerCase().includes('fruta') || t.nome.toLowerCase().includes('feij') || t.nome.toLowerCase().includes('lentilha') || t.nome.toLowerCase().includes('grão') || t.nome.toLowerCase().includes('soja') || t.nome.toLowerCase().includes('ervilha') ? newMacros.cho : newMacros.ptn;
-          return { ...t, nome: dadosSalvar.nome_exibicao, baseMacro: baseMacroUpdate, macrosReal: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, peso_unitario: dadosSalvar.peso_unitario || undefined, medidas_customizadas: dadosSalvar.medidas_customizadas };
+          const updateFn = (prev: ItemTabela[]) => prev.map(t => {
+            if (t.id === rowId) {
+              return { ...t, dbId: finalDbId, nome: dadosSalvar.nome_exibicao, baseMacro: baseMacroUpdate, macrosReal: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, peso_unitario: dadosSalvar.peso_unitario || undefined, medidas_customizadas: dadosSalvar.medidas_customizadas };
+            }
+            return t;
+          });
+
+          if (nomeTabela === 'proteinas') setTabelaProteinas(updateFn);
+          else if (nomeTabela === 'arroz') setTabelaArroz(updateFn);
+          else if (nomeTabela === 'frutas') setTabelaFrutas(updateFn);
+          else if (nomeTabela === 'feijao') setTabelaFeijao(updateFn);
         }
-        return t;
-      });
-      setTabelaProteinas(atualizarLinhasTabela(tabelaProteinas));
-      setTabelaArroz(atualizarLinhasTabela(tabelaArroz));
-      setTabelaFrutas(atualizarLinhasTabela(tabelaFrutas));
-      setTabelaFeijao(atualizarLinhasTabela(tabelaFeijao));
+      }
 
-      setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '', medidasCustomizadas: [] });
+      setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '', medidasCustomizadas: [], source: undefined });
     } catch (err) { alert("Erro ao salvar o alimento."); } 
     finally { setSalvandoAlimento(false); }
   };
@@ -660,38 +620,33 @@ function PrescricaoEditor() {
     setError(null);
     try {
       setLoading(true);
-      
       const payloadDados = { blocos, tabelasSelecionadas, alvosTabelas, tabelaProteinas, tabelaArroz, tabelaFrutas, tabelaFeijao, metadados: { tituloDistribuicao: metadados.tituloDistribuicao, tituloFormatacao: metadados.tituloFormatacao } };
 
       if (isTemplateMode) {
          if (!nomeTemplateAtual.trim()) { setError('Dê um nome para o seu template no topo da página.'); setLoading(false); return; }
          const payload = { nome: nomeTemplateAtual, dados_estruturados: payloadDados };
-         if (templateId) {
-            await supabase.from('templates_prescricao').update(payload).eq('id', templateId);
-         } else {
-            await supabase.from('templates_prescricao').insert([payload]);
-         }
+         if (templateId) { await supabase.from('templates_prescricao').update(payload).eq('id', templateId); } 
+         else { await supabase.from('templates_prescricao').insert([payload]); }
          setSucessoMsg('Template salvo com sucesso!');
       } else {
          if (!metadados.pacienteId) { setError('Por favor, selecione um paciente no cabeçalho.'); setLoading(false); return; }
-         const payload = {
-           paciente_id: metadados.pacienteId,
-           cardapio_texto: gerarTextoPrescricao(),
-           orientacoes_selecionadas: [],
-           dados_estruturados: { ...payloadDados, metadados }
-         };
-         if (editId) {
-           await supabase.from('prescricoes').update(payload).eq('id', editId);
-         } else {
-           await supabase.from('prescricoes').insert([payload]);
+         const payload = { paciente_id: metadados.pacienteId, cardapio_texto: gerarTextoPrescricao(), orientacoes_selecionadas: [], dados_estruturados: { ...payloadDados, metadados } };
+         
+         // BUG DA CRIAÇÃO INFINITA CORRIGIDO:
+         if (currentPrescricaoId) { 
+           await supabase.from('prescricoes').update(payload).eq('id', currentPrescricaoId); 
+         } 
+         else { 
+           const { data, error } = await supabase.from('prescricoes').insert([payload]).select('id').single(); 
+           if (!error && data) {
+              setCurrentPrescricaoId(data.id);
+              window.history.replaceState(null, '', `?editId=${data.id}`);
+           }
          }
          setSucessoMsg('Dieta salva com sucesso!');
       }
-
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) { setError('Erro ao salvar os dados.'); } 
-    finally { setLoading(false); }
+      setSuccess(true); setTimeout(() => setSuccess(false), 3000);
+    } catch (err) { setError('Erro ao salvar os dados.'); } finally { setLoading(false); }
   };
 
   const convertFileToBase64 = (file: File): Promise<string> => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve((reader.result as string).split(',')[1]); reader.onerror = error => reject(error); }); };
@@ -728,17 +683,11 @@ function PrescricaoEditor() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       
-      const topMargin = 55; 
-      const bottomMargin = 25;
+      const topMargin = 55; const bottomMargin = 25;
       const availableHeight = pageHeight - topMargin - bottomMargin;
-      
-      const imgWidth = pdfWidth - 24; 
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgWidth = pdfWidth - 24; const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      let heightLeft = imgHeight;
-      let position = topMargin;
-      let currentPage = 1;
-
+      let heightLeft = imgHeight; let position = topMargin; let currentPage = 1;
       const logoData = await getLogoBase64();
 
       const drawHeaderFooter = (page: number) => {
@@ -749,47 +698,32 @@ function PrescricaoEditor() {
 
         if (page === 1) {
           if (logoData) { pdf.addImage(logoData, 'JPEG', pdfWidth - 48, 12, 36, 36); }
-          pdf.setFont("helvetica", "normal");
-          pdf.setTextColor(30, 58, 138); 
-          pdf.setFontSize(14);
+          pdf.setFont("helvetica", "normal"); pdf.setTextColor(30, 58, 138); pdf.setFontSize(14);
           pdf.text("Nutrição e Educação em Diabetes", 12, 28);
-          pdf.setFontSize(13);
-          pdf.text("Paciente:", 12, 36);
-          pdf.setFont("helvetica", "bold");
-          pdf.text(metadados.pacienteNome || '___________________', 32, 36);
-          pdf.setDrawColor(0, 0, 0);
-          pdf.setLineWidth(0.3);
-          pdf.setLineDashPattern([1, 1], 0);
-          pdf.line(12, 42, pdfWidth - 12, 42); 
-          pdf.setLineDashPattern([], 0); 
-          pdf.setFont("helvetica", "normal");
-          pdf.setTextColor(30, 58, 138); 
-          pdf.setFontSize(11);
+          pdf.setFontSize(13); pdf.text("Paciente:", 12, 36);
+          pdf.setFont("helvetica", "bold"); pdf.text(metadados.pacienteNome || '___________________', 32, 36);
+          pdf.setDrawColor(0, 0, 0); pdf.setLineWidth(0.3); pdf.setLineDashPattern([1, 1], 0);
+          pdf.line(12, 42, pdfWidth - 12, 42); pdf.setLineDashPattern([], 0); 
+          pdf.setFont("helvetica", "normal"); pdf.setTextColor(30, 58, 138); pdf.setFontSize(11);
           pdf.text("Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909", 12, 48);
-          pdf.setTextColor(0, 102, 204);
-          pdf.text("www.carolinaminhanutri.com", 12, 53);
-          pdf.setTextColor(30, 58, 138); 
-          pdf.text(`Data: ${metadados.dataPrescricao}`, 12, 58);
+          pdf.setTextColor(0, 102, 204); pdf.text("www.carolinaminhanutri.com", 12, 53);
+          pdf.setTextColor(30, 58, 138); pdf.text(`Data: ${metadados.dataPrescricao}`, 12, 58);
           
           if (metadados.tituloDistribuicao) {
              pdf.setTextColor(0, 0, 0);
              const fmt = metadados.tituloFormatacao || { bold: false, italic: false, underline: false, size: 12 };
              const fStyle = (fmt.bold && fmt.italic) ? "bolditalic" : fmt.bold ? "bold" : fmt.italic ? "italic" : "normal";
-             pdf.setFont("helvetica", fStyle);
-             pdf.setFontSize(fmt.size);
+             pdf.setFont("helvetica", fStyle); pdf.setFontSize(fmt.size);
              pdf.text(metadados.tituloDistribuicao, 12, 66);
              if (fmt.underline) {
                  const textWidth = pdf.getTextWidth(metadados.tituloDistribuicao);
-                 pdf.setLineWidth(0.5);
-                 pdf.line(12, 67, 12 + textWidth, 67);
+                 pdf.setLineWidth(0.5); pdf.line(12, 67, 12 + textWidth, 67);
              }
              position = topMargin + 15;
           }
         }
 
-        pdf.setFont("helvetica", "normal");
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFontSize(9);
+        pdf.setFont("helvetica", "normal"); pdf.setTextColor(0, 0, 0); pdf.setFontSize(9);
         const txt1 = "Carolina de Souza Silva Macedo - Nutricionista e Educadora em Diabetes - CRN 29096";
         pdf.text(txt1, pdfWidth / 2, pageHeight - 15, { align: "center" });
         pdf.setTextColor(0, 102, 204);
@@ -803,8 +737,7 @@ function PrescricaoEditor() {
 
       while (heightLeft > 0) {
         position = heightLeft - imgHeight + topMargin; 
-        pdf.addPage();
-        currentPage++;
+        pdf.addPage(); currentPage++;
         pdf.addImage(imgData, 'JPEG', 12, position, imgWidth, imgHeight);
         drawHeaderFooter(currentPage);
         heightLeft -= availableHeight;
@@ -836,70 +769,38 @@ function PrescricaoEditor() {
     finally { setIsSigning(false); }
   };
 
-  const handleDragStart = (e: React.DragEvent, blocoId: string, opcaoId: string, index: number) => {
-    e.dataTransfer.setData('text/plain', JSON.stringify({ blocoId, opcaoId, index }));
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragTarget !== targetId) {
-      setDragTarget(targetId);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    if (dragTarget === targetId) {
-      setDragTarget(null);
-    }
-  };
-
+  const handleDragStart = (e: React.DragEvent, blocoId: string, opcaoId: string, index: number) => { e.dataTransfer.setData('text/plain', JSON.stringify({ blocoId, opcaoId, index })); e.dataTransfer.effectAllowed = 'move'; };
+  const handleDragOver = (e: React.DragEvent, targetId: string) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragTarget !== targetId) { setDragTarget(targetId); } };
+  const handleDragLeave = (e: React.DragEvent, targetId: string) => { e.preventDefault(); if (dragTarget === targetId) { setDragTarget(null); } };
   const handleDrop = (e: React.DragEvent, targetBlocoId: string, targetOpcaoId: string, targetIndex: number) => {
-    e.preventDefault();
-    setDragTarget(null);
-    setDraggableItem(null);
+    e.preventDefault(); setDragTarget(null); setDraggableItem(null);
     try {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
       const { blocoId: sourceBlocoId, opcaoId: sourceOpcaoId, index: sourceIndex } = data;
-
       if (sourceBlocoId === targetBlocoId && sourceOpcaoId === targetOpcaoId && sourceIndex !== targetIndex) {
         setBlocos(prev => prev.map(b => {
           if (b.id !== targetBlocoId) return b;
-          return {
-            ...b,
-            opcoes: b.opcoes?.map(o => {
+          return { ...b, opcoes: b.opcoes?.map(o => {
               if (o.id !== targetOpcaoId) return o;
               const newItens = [...o.itens];
               const [removed] = newItens.splice(sourceIndex, 1);
               newItens.splice(targetIndex, 0, removed);
-              
-              if (newItens.length > 0 && newItens[0].conexao !== 'nova_linha') {
-                 newItens[0].conexao = 'nova_linha';
-              }
-              
+              if (newItens.length > 0 && newItens[0].conexao !== 'nova_linha') { newItens[0].conexao = 'nova_linha'; }
               return { ...o, itens: newItens };
             })
           };
         }));
       }
-    } catch (err) {
-      console.error("Erro ao processar o Drag and Drop", err);
-    }
+    } catch (err) {}
   };
-
-  const handleDragEnd = () => {
-    setDragTarget(null);
-    setDraggableItem(null);
-  };
+  const handleDragEnd = () => { setDragTarget(null); setDraggableItem(null); };
 
   const renderTabelaRows = (tabelaNome: 'proteinas' | 'arroz' | 'frutas' | 'feijao', data: ItemTabela[], alvo: string) => (
-    <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto">
-      {data.map((item) => {
+    <div className="p-4 space-y-2">
+      {data.map((item, index) => {
         const pesoCalculado = calcularPesoEquivalente(alvo, item.baseMacro, item.porcao_padrao);
         return (
-          <div key={item.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white p-2 rounded border border-slate-200">
+          <div key={item.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white p-2 rounded border border-slate-200 relative" style={{ zIndex: 50 - index }}>
             <div className="flex-1 min-w-[200px] relative z-10">
               <BuscaAlimento
                 valorInicial={item.nome}
@@ -969,7 +870,7 @@ function PrescricaoEditor() {
               list="lista-medidas"
             />
 
-            <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.macrosReal)} className="p-2 text-slate-400 hover:text-emerald-600 shrink-0"><Pencil className="w-4 h-4" /></button>
+            <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.macrosReal, { type: 'tabela', nomeTabela: tabelaNome, id: item.id })} className="p-2 text-slate-400 hover:text-emerald-600 shrink-0"><Pencil className="w-4 h-4" /></button>
             <button type="button" onClick={() => removerItemTabela(tabelaNome, item.id)} className="p-2 text-slate-400 hover:text-red-600 shrink-0"><Trash2 className="w-4 h-4" /></button>
           </div>
         );
@@ -1009,7 +910,6 @@ function PrescricaoEditor() {
           </button>
           <div className="flex items-center gap-2">
             
-            {/* Botões extras se não estiver no modo de criar template do zero */}
             {!isTemplateMode && (
               <>
                 <button onClick={abrirModalImportar} className="flex items-center gap-2 px-3 py-2 border border-blue-200 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 font-medium transition text-sm">
@@ -1029,7 +929,7 @@ function PrescricaoEditor() {
             )}
 
             <button onClick={handleSalvarGeral} disabled={loading} className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 disabled:bg-slate-400 transition text-sm shadow-sm ml-1">
-              {loading ? 'Salvando...' : (isTemplateMode ? (templateId ? 'Atualizar Template' : 'Criar Template') : (editId ? 'Atualizar Dieta' : 'Salvar Dieta'))}
+              {loading ? 'Salvando...' : (isTemplateMode ? (templateId ? 'Atualizar Template' : 'Criar Template') : (currentPrescricaoId ? 'Atualizar Dieta' : 'Salvar Dieta'))}
             </button>
           </div>
         </div>
@@ -1180,7 +1080,6 @@ function PrescricaoEditor() {
                                     {(bloco.opcoes || []).length > 1 ? `Opção ${idx + 1}:` : `Sugestão:`}
                                   </span>
                                   
-                                  {/* PAINEL DE MACROS ESPECÍFICO DESTA OPÇÃO */}
                                   {(() => {
                                     const macros = calcularTotalMacros(opcao);
                                     return (
@@ -1232,21 +1131,21 @@ function PrescricaoEditor() {
                                             ? 'border-t-2 border-t-emerald-500 bg-emerald-50 shadow-sm' 
                                             : 'bg-transparent border border-transparent hover:bg-slate-50 hover:border-slate-200'
                                         }`}
+                                        style={{ zIndex: 100 - iIndex }}
                                       >
-                                        <div className="flex items-center gap-1 sm:gap-1.5 w-full flex-wrap xl:flex-nowrap">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 w-full flex-wrap xl:flex-nowrap relative">
                                           
-                                          {/* GRIP - ATIVA O DRAG E DROP */}
+                                          {/* GRIP */}
                                           <div 
                                             className="text-slate-300 cursor-move opacity-0 group-hover/item:opacity-100 px-1 py-2 -ml-1"
                                             onMouseEnter={() => setDraggableItem(item.id)}
                                             onMouseLeave={() => setDraggableItem(null)}
-                                            title="Clique e arraste para reordenar"
                                           >
                                             <GripVertical className="w-4 h-4" />
                                           </div>
 
                                           {iIndex > 0 ? (
-                                            <select value={item.conexao || 'nova_linha'} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)} className={`font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors ${item.conexao === 'ou' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-emerald-700'}`} title="Alterar conexão">
+                                            <select value={item.conexao || 'nova_linha'} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'conexao', e.target.value)} className={`font-bold px-1 py-0.5 rounded text-[10px] outline-none cursor-pointer hover:bg-slate-200 transition-colors ${item.conexao === 'ou' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-emerald-700'}`}>
                                               <option value="nova_linha">↵ Nova Linha</option>
                                               <option value="mais"> + </option>
                                               <option value="ou"> OU </option>
@@ -1255,79 +1154,60 @@ function PrescricaoEditor() {
                                             <span className="text-[11pt] font-semibold text-black px-1 opacity-0 pointer-events-none">+</span>
                                           )}
 
-                                          {/* --- BOTÃO MÁGICO DE MEDIDA CASEIRA COM ETIQUETA VISUAL --- */}
-                                          <div className="relative shrink-0 flex items-center gap-1">
+                                          {/* VARINHA MÁGICA NA REFEIÇÃO */}
+                                          <div className="relative shrink-0 flex items-center gap-1 z-20">
                                             <button 
                                               type="button" 
                                               onClick={() => setMedidaDropdownAberto(medidaDropdownAberto === item.id ? null : item.id)} 
                                               className={`p-1.5 rounded transition-colors ${item.quantidade ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
-                                              title="Sugerir Medida Caseira (Calculadora Inteligente)"
                                             >
                                               <Wand2 className="w-3.5 h-3.5" />
                                             </button>
                                             
-                                            {/* ETIQUETAS VISUAIS DE DADOS NO BANCO */}
                                             {item.peso_unitario && (
-                                              <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-2xs" title={`Unidade cadastrada: 1 un = ${item.peso_unitario}g`}>
-                                                ⚖️️ 1un={item.peso_unitario}g
+                                              <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-2xs">
+                                                ⚖ 1un={item.peso_unitario}g
                                               </span>
                                             )}
-
                                             {item.medidas_customizadas && item.medidas_customizadas.length > 0 && (
-                                              <span className="text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shadow-2xs" title="Medida Customizada ativada">
+                                              <span className="text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shadow-2xs">
                                                 ✨ Custom
                                               </span>
                                             )}
 
                                             {medidaDropdownAberto === item.id && (
-                                              <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 z-[60] py-1">
+                                              <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-1" style={{ zIndex: 9999 }}>
                                                 <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
-                                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sugestões (Base: {item.quantidade || '0'})</span>
+                                                  <span className="text-[10px] font-bold text-slate-500 uppercase">Sugestões (Base: {item.quantidade || '0'})</span>
                                                 </div>
                                                 <div className="max-h-48 overflow-y-auto">
                                                   {getSugestoesMedida(item.quantidade, item.peso_unitario, item.medidas_customizadas).map((sug, idx) => (
                                                     <button 
-                                                      key={idx} 
-                                                      type="button" 
-                                                      onClick={() => {
-                                                        atualizarItem(bloco.id, opcao.id, item.id, 'medida_caseira', sug.texto);
-                                                        setMedidaDropdownAberto(null);
-                                                      }} 
+                                                      key={idx} type="button" 
+                                                      onClick={() => { atualizarItem(bloco.id, opcao.id, item.id, 'medida_caseira', sug.texto); setMedidaDropdownAberto(null); }} 
                                                       className="w-full text-left px-3 py-2 text-[10pt] text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition-colors border-b border-slate-50 last:border-0"
                                                     >
                                                       <span className="font-semibold block">{sug.texto}</span>
                                                     </button>
                                                   ))}
-                                                  {parseQtd(item.quantidade) <= 0 && (
-                                                    <div className="px-3 py-3 text-xs text-slate-500 text-center">Digite o peso primeiro.</div>
-                                                  )}
                                                 </div>
                                               </div>
                                             )}
                                           </div>
 
-                                          <input 
-                                            type="text" 
-                                            value={item.medida_caseira || ''} 
-                                            onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'medida_caseira', e.target.value)} 
-                                            placeholder="Medida caseira" 
-                                            className="w-24 sm:w-28 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] text-slate-600 italic" 
-                                            list="lista-medidas"
-                                            title="Medida Caseira (Opcional)"
-                                          />
-
+                                          <input type="text" value={item.medida_caseira || ''} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'medida_caseira', e.target.value)} placeholder="Medida caseira" className="w-24 sm:w-28 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] text-slate-600 italic" list="lista-medidas" />
                                           <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 sm:w-20 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
                                           
-                                          <div className="flex-1 min-w-[100px] relative">
+                                          <div className="flex-1 min-w-[100px] relative z-10">
                                             <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId, peso_unitario, medidas_customizadas) => {
                                                 setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g', peso_unitario: peso_unitario, medidas_customizadas: medidas_customizadas } : i) } : o) } : b))
                                               }} 
                                             />
                                           </div>
                                           
-                                          <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'mais', item.id)} className="opacity-0 group-hover/item:opacity-100 p-1 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded transition-all ml-1 shrink-0" title="Adicionar alimento na frente (+)"><Plus className="w-3.5 h-3.5" /></button>
-                                          <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.baseMacros)} className="p-1 text-slate-300 hover:text-emerald-600 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0"><Pencil className="w-3.5 h-3.5" /></button>
-                                          <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'mais', item.id)} className="opacity-0 group-hover/item:opacity-100 p-1 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded transition-all ml-1 shrink-0 z-10"><Plus className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => handleAbrirEdicao(item.dbId, item.nome, item.baseMacros, { type: 'refeicao', blocoId: bloco.id, opcaoId: opcao.id, itemId: item.id })} className="p-1 text-slate-300 hover:text-emerald-600 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0 z-10"><Pencil className="w-3.5 h-3.5" /></button>
+                                          <button type="button" onClick={() => removerItem(bloco.id, opcao.id, item.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0 z-10"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
 
                                         <div className="flex items-center pl-7 gap-2 opacity-20 focus-within:opacity-100 hover:opacity-100 transition-opacity mt-0.5">
@@ -1349,7 +1229,6 @@ function PrescricaoEditor() {
                                   );
                                 })}
                               </div>
-                              
                               <button type="button" onClick={() => adicionarItem(bloco.id, opcao.id, 'nova_linha')} className="text-emerald-600/50 hover:text-emerald-600 font-medium text-[9pt] flex items-center gap-1 pl-3 mt-1 mb-2 transition-colors"><Plus className="w-3.5 h-3.5" /> Adicionar nova linha de alimento abaixo</button>
                             </div>
                           ))}
@@ -1362,7 +1241,6 @@ function PrescricaoEditor() {
                       </div>
                     )}
 
-                    {/* --- TIPO: TEXTO LIVRE --- */}
                     {bloco.tipo === 'texto_livre' && (
                       <div className="flex flex-col gap-1.5 mt-2">
                         <input type="text" value={bloco.titulo} onChange={(e) => atualizarBloco(bloco.id, 'titulo', e.target.value)} placeholder="Subtítulo (Ex: Lanches da Tarde)" className="text-[12pt] font-bold text-[#b45309] outline-none placeholder-slate-300 w-full bg-transparent" />
@@ -1370,15 +1248,12 @@ function PrescricaoEditor() {
                       </div>
                     )}
 
-                    {/* --- TIPO: CONDUTAS --- */}
                     {bloco.tipo === 'condutas' && (
                       <div className="flex flex-col gap-1.5 mt-2">
                         <p className="text-[12pt] font-bold text-[#b45309]">Orientações / Condutas</p>
                         <textarea value={bloco.conteudoTexto} onChange={(e) => handleTextareaResize(e, bloco.id)} placeholder="Digite as condutas aqui ou selecione no menu de atalhos abaixo..." rows={4} className="w-full mt-1 outline-none text-[11pt] text-black resize-none overflow-hidden bg-slate-50 focus:bg-white border border-transparent focus:border-slate-200 p-2 rounded leading-relaxed" />
-                        
                         <button type="button" onClick={() => atualizarBloco(bloco.id, 'expandido', !bloco.expandido)} className="mt-2 flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-600 font-medium">
-                          <span>Atalhos de Condutas do Banco</span>
-                          <ChevronDown className={`w-4 h-4 transition-transform ${bloco.expandido ? 'rotate-180' : ''}`} />
+                          <span>Atalhos de Condutas do Banco</span><ChevronDown className={`w-4 h-4 transition-transform ${bloco.expandido ? 'rotate-180' : ''}`} />
                         </button>
                         {bloco.expandido && (
                           <div className="mt-2 p-4 bg-slate-50 rounded border border-slate-200 text-sm">
@@ -1488,9 +1363,7 @@ function PrescricaoEditor() {
         </div>
       </div>
 
-      {/* =========================================================
-          ÁREA DE IMPRESSÃO (Nativa do Navegador - Renderiza para o PDF e Impressora)
-          ========================================================= */}
+      {/* ÁREA DE IMPRESSÃO PDF NATIVA */}
       <table id="print-area" className="hidden print:table w-full bg-white text-black font-sans text-[11pt]">
         <thead className="table-header-group">
           <tr>
@@ -1503,21 +1376,12 @@ function PrescricaoEditor() {
                   </div>
                   <img src="/logo.jpg" alt="Logo" className="w-36 h-36 object-contain" />
                 </div>
-                
                 <hr className="border-t border-dashed border-black my-4 w-full" />
-                
                 <p className="text-[11pt] text-[#1e3a8a]">Carolina Macedo - Nutricionista (CRN 29096) e Educadora em Diabetes | (19) 98314-1909</p>
                 <p className="text-[11pt] text-blue-600 underline">www.carolinaminhanutri.com</p>
                 <p className="text-[11pt] text-[#1e3a8a] mt-1">Data: {metadados.dataPrescricao}</p>
-                
-                {/* TÍTULO EDITÁVEL NA IMPRESSÃO */}
                 {metadados.tituloDistribuicao && (
-                  <p className="mt-6 mb-2" style={{
-                    fontSize: `${metadados.tituloFormatacao?.size || 12}pt`,
-                    fontWeight: metadados.tituloFormatacao?.bold ? 'bold' : 'normal',
-                    fontStyle: metadados.tituloFormatacao?.italic ? 'italic' : 'normal',
-                    textDecoration: metadados.tituloFormatacao?.underline ? 'underline' : 'none',
-                  }}>
+                  <p className="mt-6 mb-2" style={{ fontSize: `${metadados.tituloFormatacao?.size || 12}pt`, fontWeight: metadados.tituloFormatacao?.bold ? 'bold' : 'normal', fontStyle: metadados.tituloFormatacao?.italic ? 'italic' : 'normal', textDecoration: metadados.tituloFormatacao?.underline ? 'underline' : 'none' }}>
                     {metadados.tituloDistribuicao}
                   </p>
                 )}
@@ -1532,76 +1396,39 @@ function PrescricaoEditor() {
               <div className="space-y-6" id="print-body">
                 {blocos.map((bloco) => {
                   if (bloco.tipo === 'condutas' && bloco.conteudoTexto?.trim()) {
-                    return (
-                      <div key={bloco.id} className="break-inside-avoid">
-                        <p className="font-bold text-[12pt] text-[#b45309] mb-1">Orientações Gerais</p>
-                        <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
-                      </div>
-                    );
+                    return ( <div key={bloco.id} className="break-inside-avoid"><p className="font-bold text-[12pt] text-[#b45309] mb-1">Orientações Gerais</p><div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div></div> );
                   }
-
                   if (bloco.tipo === 'texto_livre' && (bloco.titulo || bloco.conteudoTexto?.trim())) {
-                    return (
-                      <div key={bloco.id} className="break-inside-avoid">
-                        {bloco.titulo && <p className="font-bold text-[12pt] text-[#b45309] mb-1">{bloco.titulo}</p>}
-                        <div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>
-                      </div>
-                    );
+                    return ( <div key={bloco.id} className="break-inside-avoid">{bloco.titulo && <p className="font-bold text-[12pt] text-[#b45309] mb-1">{bloco.titulo}</p>}<div className="text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div></div> );
                   }
-
                   if (bloco.tipo === 'refeicao') {
                     const temOpcoes = (bloco.opcoes || []).some((o) => o.itens.some((i) => i.nome || i.quantidade || i.medida_caseira));
                     if (!temOpcoes && !bloco.conteudoTexto?.trim()) return null;
-
                     return (
                       <div key={bloco.id} className="break-inside-avoid mb-6">
                         {bloco.nome && <p className="font-bold text-[12pt] text-black">{bloco.nome}</p>}
-                        
-                        {bloco.mostrarMeta && bloco.metaCarboidratos && (
-                          <p className="text-[11pt] font-semibold text-[#0066cc]">META para INSULINA: {bloco.metaCarboidratos}</p>
-                        )}
-                        
+                        {bloco.mostrarMeta && bloco.metaCarboidratos && <p className="text-[11pt] font-semibold text-[#0066cc]">META para INSULINA: {bloco.metaCarboidratos}</p>}
                         {(bloco.opcoes || []).map((opcao, idx) => {
                           const temItemPreenchido = opcao.itens.some((i) => i.nome || i.quantidade || i.medida_caseira);
                           if (!temItemPreenchido) return null;
-
-                          const linhasPdf: ItemAlimento[][] = [];
-                          let curLinhaPdf: ItemAlimento[] = [];
-                          opcao.itens.forEach((item, i) => {
-                            if (i === 0 || item.conexao === 'nova_linha' || !item.conexao) {
-                              if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
-                              curLinhaPdf = [item];
-                            } else curLinhaPdf.push(item);
-                          });
+                          const linhasPdf: ItemAlimento[][] = []; let curLinhaPdf: ItemAlimento[] = [];
+                          opcao.itens.forEach((item, i) => { if (i === 0 || item.conexao === 'nova_linha' || !item.conexao) { if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf); curLinhaPdf = [item]; } else curLinhaPdf.push(item); });
                           if (curLinhaPdf.length > 0) linhasPdf.push(curLinhaPdf);
 
                           return (
                             <div key={opcao.id} className="mt-2">
-                              {bloco.opcoes!.length > 1 ? (
-                                <p className="font-bold text-[#b45309] text-[11pt] mb-1">Opção {idx + 1}:</p>
-                              ) : (
-                                <p className="font-bold text-black text-[11pt] mb-1">Sugestão:</p>
-                              )}
+                              {bloco.opcoes!.length > 1 ? <p className="font-bold text-[#b45309] text-[11pt] mb-1">Opção {idx + 1}:</p> : <p className="font-bold text-black text-[11pt] mb-1">Sugestão:</p>}
                               <div className="text-[11pt] text-black leading-relaxed">
                                 {linhasPdf.map((linha, lIdx) => (
                                   <div key={lIdx} className="mb-1">
                                     {lIdx > 0 ? '+ ' : ''}
                                     {linha.map((item, iIdx) => {
-                                        const hasMedida = !!item.medida_caseira?.trim();
-                                        const hasQtd = !!item.quantidade?.trim();
-                                        
+                                        const hasMedida = !!item.medida_caseira?.trim(); const hasQtd = !!item.quantidade?.trim();
                                         const qtd = hasQtd ? <span className="font-semibold mr-1">{item.quantidade?.trim()}</span> : null;
                                         const nome = <span>{item.nome.trim()}</span>;
                                         const med = hasMedida ? <span className="italic ml-1">({item.medida_caseira?.trim()})</span> : null;
-                                        
                                         const con = iIdx > 0 ? (item.conexao === 'ou' ? ' OU ' : ' + ') : '';
-                                        
-                                        return (
-                                          <span key={item.id}>
-                                            {iIdx > 0 && <span className="font-bold mx-1">{con}</span>}
-                                            {qtd}{nome}{med}
-                                          </span>
-                                        );
+                                        return <span key={item.id}>{iIdx > 0 && <span className="font-bold mx-1">{con}</span>}{qtd}{nome}{med}</span>;
                                     })}
                                   </div>
                                 ))}
@@ -1609,12 +1436,7 @@ function PrescricaoEditor() {
                             </div>
                           );
                         })}
-
-                        {bloco.conteudoTexto?.trim() && (
-                          <div className="mt-2 text-[11pt] whitespace-pre-line text-black leading-relaxed">
-                            {bloco.conteudoTexto}
-                          </div>
-                        )}
+                        {bloco.conteudoTexto?.trim() && <div className="mt-2 text-[11pt] whitespace-pre-line text-black leading-relaxed">{bloco.conteudoTexto}</div>}
                       </div>
                     );
                   }
@@ -1622,83 +1444,61 @@ function PrescricaoEditor() {
                 })}
               </div>
 
-              {/* TABELAS DE EQUIVALENTES (Impressão) */}
               {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.feijao || tabelasSelecionadas.frutas) && (
                 <div className="mt-10 break-before-auto">
-                  
                   {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
                     <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
-                      <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Opção</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade / Peso</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
+                      <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Opção</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaProteinas.map((item, idx) => item.nome ? (
-                            <tr key={idx}>
-                              <td className="border border-black px-3 py-1">{item.nome}</td>
-                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro, item.porcao_padrao)}</td>
-                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
-                            </tr>
+                            <tr key={idx}><td className="border border-black px-2 py-1 truncate">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic truncate">{item.medida_caseira || '--'}</td></tr>
                           ) : null)}
-                          <tr><td className="border border-black px-3 py-1">Ovos</td><td className="border border-black px-3 py-1 text-center italic">Ajustar</td><td className="border border-black px-3 py-1 italic">1 ovo = ~6g ptn</td></tr>
+                          <tr><td className="border border-black px-2 py-1 truncate">Ovos</td><td className="border border-black px-2 py-1 text-center italic">Ajustar</td><td className="border border-black px-2 py-1 italic truncate">1 ovo = ~6g ptn</td></tr>
                         </tbody>
                       </table>
                     </div>
                   )}
-
                   {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
                     <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 2: Substitutos de Arroz / Raízes (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade Equivalente</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
+                      <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 2: Substitutos de Arroz / Raízes (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaArroz.map((item, idx) => item.nome ? (
-                            <tr key={idx}>
-                              <td className="border border-black px-3 py-1">{item.nome}</td>
-                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro, item.porcao_padrao)}</td>
-                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
-                            </tr>
+                            <tr key={idx}><td className="border border-black px-2 py-1 truncate">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic truncate">{item.medida_caseira || '--'}</td></tr>
                           ) : null)}
                         </tbody>
                       </table>
                     </div>
                   )}
-
                   {tabelasSelecionadas.feijao && alvosTabelas.feijao && (
                     <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 3: Substitutos de Leguminosas / Feijões (aprox. {alvosTabelas.feijao}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Alimento</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade Equivalente</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
+                      <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 3: Substitutos de Leguminosas / Feijões (aprox. {alvosTabelas.feijao}g Carboidratos)</p>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaFeijao.map((item, idx) => item.nome ? (
-                            <tr key={idx}>
-                              <td className="border border-black px-3 py-1">{item.nome}</td>
-                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.feijao, item.baseMacro, item.porcao_padrao)}</td>
-                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
-                            </tr>
+                            <tr key={idx}><td className="border border-black px-2 py-1 truncate">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.feijao, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic truncate">{item.medida_caseira || '--'}</td></tr>
                           ) : null)}
                         </tbody>
                       </table>
                     </div>
                   )}
-
                   {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
                     <div className="mb-8 break-inside-avoid">
-                      <p className="font-bold text-[#1e3a8a] text-[12pt] mb-2">Tabela 4: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[10.5pt]">
-                        <thead><tr><th className="border border-black text-left px-3 py-1 font-bold">Fruta</th><th className="border border-black text-center px-3 py-1 font-bold w-1/4">Quantidade / Peso</th><th className="border border-black text-left px-3 py-1 font-bold w-1/3">Medida Caseira</th></tr></thead>
+                      <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 4: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Fruta</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaFrutas.map((item, idx) => item.nome ? (
-                            <tr key={idx}>
-                              <td className="border border-black px-3 py-1">{item.nome}</td>
-                              <td className="border border-black px-3 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro, item.porcao_padrao)}</td>
-                              <td className="border border-black px-3 py-1 italic">{item.medida_caseira || '--'}</td>
-                            </tr>
+                            <tr key={idx}><td className="border border-black px-2 py-1 truncate">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic truncate">{item.medida_caseira || '--'}</td></tr>
                           ) : null)}
                         </tbody>
                       </table>
                     </div>
                   )}
-
                 </div>
               )}
             </td>
@@ -1706,7 +1506,6 @@ function PrescricaoEditor() {
         </tbody>
       </table>
 
-      {/* RODAPÉ FIXO NA IMPRESSÃO NATIVA */}
       <div className="hidden print:flex fixed bottom-0 left-0 w-full bg-white flex-col items-center justify-center pt-2 pb-2 z-50 border-t border-slate-200">
         <p className="text-[10pt] text-black">Carolina de Souza Silva Macedo - Nutricionista e Educadora em Diabetes - CRN 29096</p>
         <div className="flex items-center gap-4 mt-1 text-[10pt] text-[#0066cc]">
@@ -1716,7 +1515,8 @@ function PrescricaoEditor() {
         </div>
       </div>
 
-      {/* MODAL DE ASSINATURA */}
+      {/* MODAIS (Restante inalterado, apenas importando o novo handleAtualizarAlimento ajustado) */}
+      
       {isSignModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -1737,7 +1537,6 @@ function PrescricaoEditor() {
         </div>
       )}
 
-      {/* MODAL DE IMPORTAR TEMPLATE */}
       {modalImportarAberta && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[80vh]">
@@ -1771,7 +1570,6 @@ function PrescricaoEditor() {
         </div>
       )}
 
-      {/* MODAL DE SALVAR COMO NOVO TEMPLATE */}
       {modalSalvarTemplateAberta && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -1803,40 +1601,68 @@ function PrescricaoEditor() {
         </div>
       )}
 
-      {/* MODAL DE EDIÇÃO DE ALIMENTO E MEDIDA CUSTOMIZADA */}
       {modalEdicao.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-              <h3 className="text-lg font-bold">Refinar Alimento</h3>
-              <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })}><X className="w-5 h-5"/></button>
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col max-h-[95vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0 bg-slate-50">
+              <h3 className="text-lg font-bold text-slate-800">Refinar Alimento</h3>
+              <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })}><X className="w-5 h-5 text-slate-400 hover:text-slate-600"/></button>
             </div>
             
-            <div className="p-6 space-y-5 overflow-y-auto">
-              <div>
-                <label className="block text-sm font-semibold mb-1">Nome do Alimento</label>
-                <input type="text" value={modalEdicao.nome} onChange={e => setModalEdicao({...modalEdicao, nome: e.target.value})} className="w-full px-3 py-2 border rounded" />
+            <div className="p-6 space-y-5 overflow-y-auto bg-white">
+              
+              <div className="relative">
+                <label className="block text-sm font-semibold mb-1 text-slate-700">Nome do Alimento</label>
+                <div className="flex items-center gap-2">
+                  <input type="text" value={modalEdicao.nome} onChange={e => setModalEdicao({...modalEdicao, nome: e.target.value})} className="flex-1 px-3 py-2 border border-slate-300 focus:border-emerald-500 rounded outline-none" />
+                  <button 
+                    onClick={handleBuscarNaWeb}
+                    disabled={buscandoWeb || !modalEdicao.nome.trim()}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors disabled:opacity-50 font-medium text-sm"
+                    title="Buscar tabela nutricional em Open Food Facts"
+                  >
+                    {buscandoWeb ? <Loader2 className="w-4 h-4 animate-spin"/> : <Globe className="w-4 h-4"/>} Web
+                  </button>
+                </div>
+
+                {resultadosWeb.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                    <div className="px-3 py-2 bg-blue-50 flex items-center justify-between sticky top-0">
+                      <span className="text-[10px] font-bold text-blue-800 uppercase">Resultados da Internet (100g)</span>
+                      <button onClick={() => setResultadosWeb([])}><X className="w-3 h-3 text-blue-800"/></button>
+                    </div>
+                    {resultadosWeb.map((p, idx) => (
+                      <div key={idx} onClick={() => selecionarProdutoWeb(p)} className="p-3 hover:bg-slate-50 cursor-pointer">
+                        <p className="text-sm font-bold text-slate-800 line-clamp-1">{p.product_name_pt || p.product_name} {p.brands ? `(${p.brands.split(',')[0]})` : ''}</p>
+                        <div className="flex gap-2 mt-1 text-[10px] font-mono text-slate-500">
+                          <span>C: {p.nutriments.carbohydrates_100g || 0}g</span>
+                          <span>P: {p.nutriments.proteins_100g || 0}g</span>
+                          <span>L: {p.nutriments.fat_100g || 0}g</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-emerald-700">Porção Padrão</label>
-                  <input type="text" value={modalEdicao.porcao} onChange={e => setModalEdicao({...modalEdicao, porcao: e.target.value})} placeholder="Ex: 100g" className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50 rounded text-sm" />
+                  <input type="text" value={modalEdicao.porcao} onChange={e => setModalEdicao({...modalEdicao, porcao: e.target.value})} placeholder="Ex: 100g" className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50 rounded text-sm outline-none focus:ring-1 focus:ring-emerald-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-blue-700" title="Usado para calcular a quantidade de unidades na varinha mágica.">Peso Unidade (g)</label>
-                  <input type="number" value={modalEdicao.pesoUnitario} onChange={e => setModalEdicao({...modalEdicao, pesoUnitario: e.target.value})} placeholder="Ex: 12" className="w-full px-3 py-2 border border-blue-300 bg-blue-50 rounded text-sm" />
+                  <input type="number" value={modalEdicao.pesoUnitario} onChange={e => setModalEdicao({...modalEdicao, pesoUnitario: e.target.value})} placeholder="Ex: 12" className="w-full px-3 py-2 border border-blue-300 bg-blue-50 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" />
                 </div>
               </div>
               <p className="text-[10px] text-slate-500 -mt-3">Os macros abaixo devem ser referentes à <b>Porção Padrão</b>.</p>
               
               <div className="grid grid-cols-3 gap-3 pt-1">
-                <div><label className="block text-xs font-semibold mb-1">CHO (g)</label><input type="number" value={modalEdicao.cho} onChange={e => setModalEdicao({...modalEdicao, cho: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
-                <div><label className="block text-xs font-semibold mb-1">PTN (g)</label><input type="number" value={modalEdicao.ptn} onChange={e => setModalEdicao({...modalEdicao, ptn: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
-                <div><label className="block text-xs font-semibold mb-1">LIP (g)</label><input type="number" value={modalEdicao.lip} onChange={e => setModalEdicao({...modalEdicao, lip: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
+                <div><label className="block text-xs font-semibold mb-1">CHO (g)</label><input type="number" value={modalEdicao.cho} onChange={e => setModalEdicao({...modalEdicao, cho: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded outline-none focus:border-emerald-500" /></div>
+                <div><label className="block text-xs font-semibold mb-1">PTN (g)</label><input type="number" value={modalEdicao.ptn} onChange={e => setModalEdicao({...modalEdicao, ptn: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded outline-none focus:border-emerald-500" /></div>
+                <div><label className="block text-xs font-semibold mb-1">LIP (g)</label><input type="number" value={modalEdicao.lip} onChange={e => setModalEdicao({...modalEdicao, lip: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded outline-none focus:border-emerald-500" /></div>
               </div>
 
-              {/* SEÇÃO DE MEDIDAS CUSTOMIZADAS */}
               <div className="pt-4 border-t border-slate-200">
                 <h4 className="text-sm font-bold text-amber-700 mb-2 flex items-center gap-1"><Wand2 className="w-4 h-4"/> Medidas Caseiras Específicas</h4>
                 <p className="text-[10px] text-slate-500 mb-3 leading-tight">Defina quanto pesa uma medida apenas para este alimento (Ex: Colher de sopa = 3g CHO). O sistema calculará o peso em gramas.</p>
@@ -1845,10 +1671,11 @@ function PrescricaoEditor() {
                   <select 
                     value={novaMedidaCaseira.nome} 
                     onChange={e => setNovaMedidaCaseira({...novaMedidaCaseira, nome: e.target.value})}
-                    className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none"
+                    className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none focus:border-amber-500 bg-white"
                   >
                     <option value="colher de sopa">Colher de Sopa</option>
                     <option value="colher de sobremesa">Colher de Sobremesa</option>
+                    <option value="colher de chá">Colher de Chá</option>
                     <option value="concha">Concha</option>
                     <option value="escumadeira">Escumadeira</option>
                     <option value="xícara">Xícara</option>
@@ -1857,38 +1684,37 @@ function PrescricaoEditor() {
                   </select>
                 </div>
                 
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-3 bg-slate-50 p-2 rounded border border-slate-200">
                   <span className="text-xs text-slate-600 font-semibold">=</span>
                   <input 
                     type="number" 
                     placeholder="Ex: 3"
                     value={novaMedidaCaseira.valor}
                     onChange={e => setNovaMedidaCaseira({...novaMedidaCaseira, valor: e.target.value})}
-                    className="w-16 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none text-center"
+                    className="w-16 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none text-center focus:border-amber-500"
                   />
                   <span className="text-xs text-slate-600 font-semibold">g de</span>
                   <select 
                     value={novaMedidaCaseira.macroRef} 
                     onChange={e => setNovaMedidaCaseira({...novaMedidaCaseira, macroRef: e.target.value})}
-                    className="w-20 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none font-bold text-slate-700"
+                    className="w-20 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none font-bold text-slate-700 focus:border-amber-500 bg-white"
                   >
                     <option value="cho">CHO</option>
                     <option value="ptn">PTN</option>
                     <option value="lip">LIP</option>
                   </select>
                   
-                  <button type="button" onClick={handleAddMedidaCustomizada} className="ml-auto p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition" title="Adicionar Regra">
+                  <button type="button" onClick={handleAddMedidaCustomizada} className="ml-auto p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition border border-amber-200" title="Adicionar Regra">
                     <Plus className="w-4 h-4"/>
                   </button>
                 </div>
 
-                {/* LISTA DAS MEDIDAS SALVAS */}
                 {modalEdicao.medidasCustomizadas.length > 0 && (
-                  <div className="mt-3 space-y-1.5 bg-slate-50 p-2 rounded border border-slate-200">
+                  <div className="mt-3 space-y-1.5">
                     {modalEdicao.medidasCustomizadas.map((mc, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs bg-white px-2 py-1 rounded border border-slate-100 shadow-sm">
+                      <div key={idx} className="flex items-center justify-between text-xs bg-amber-50/50 px-3 py-2 rounded border border-amber-100 shadow-sm">
                         <span className="font-semibold text-slate-700 capitalize">{mc.nome} <span className="font-normal text-slate-400">({mc.peso_g.toFixed(1)}g)</span></span>
-                        <button type="button" onClick={() => handleRemoverMedidaCustomizada(idx)} className="text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>
+                        <button type="button" onClick={() => handleRemoverMedidaCustomizada(idx)} className="text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>
                       </div>
                     ))}
                   </div>
@@ -1898,14 +1724,15 @@ function PrescricaoEditor() {
             </div>
 
             <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t shrink-0">
-              <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })} className="px-4 py-2 font-medium text-slate-600">Cancelar</button>
-              <button onClick={handleAtualizarAlimento} disabled={salvandoAlimento || !modalEdicao.nome.trim()} className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700">{salvandoAlimento ? 'Salvando...' : 'Salvar no Banco'}</button>
+              <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })} className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancelar</button>
+              <button onClick={handleAtualizarAlimento} disabled={salvandoAlimento || !modalEdicao.nome.trim()} className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50">
+                {salvandoAlimento ? 'Salvando...' : 'Salvar no Banco'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* LISTA ESCONDIDA DE SUGESTÕES DE MEDIDA CASEIRA */}
       <datalist id="lista-medidas">
         <option value="1 colher de café" />
         <option value="1 colher de chá" />
