@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 
 interface Props {
   valorInicial: string;
-  onSelect: (nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string, pesoUnitario?: number) => void;
+  onSelect: (nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string, pesoUnitario?: number, medidasCustomizadas?: any[]) => void;
 }
 
 export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
@@ -77,7 +77,7 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
         onChange={(e) => {
           isInitialRender.current = false;
           setQuery(e.target.value);
-          onSelect(e.target.value, { cho: 0, ptn: 0, lip: 0 }, '', undefined);
+          onSelect(e.target.value, { cho: 0, ptn: 0, lip: 0 }, '', undefined, []);
         }}
         onFocus={() => { if (resultados.length > 0 || loading || debugError) setAberto(true); }}
       />
@@ -100,7 +100,8 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
                       nomeFinal, 
                       { cho: Number(alimento.cho) || 0, ptn: Number(alimento.ptn) || 0, lip: Number(alimento.lip) || 0 },
                       alimento.id,
-                      alimento.peso_unitario ? Number(alimento.peso_unitario) : undefined
+                      alimento.peso_unitario ? Number(alimento.peso_unitario) : undefined,
+                      alimento.medidas_customizadas || []
                     );
                     setAberto(false);
                   }}
@@ -110,7 +111,9 @@ export default function BuscaAlimento({ valorInicial, onSelect }: Props) {
                     <span className="bg-blue-50 text-blue-600 px-1.5 rounded">C: {alimento.cho}g</span>
                     <span className="bg-red-50 text-red-500 px-1.5 rounded">P: {alimento.ptn}g</span>
                     <span className="bg-amber-50 text-amber-600 px-1.5 rounded">L: {alimento.lip}g</span>
-                    {alimento.peso_unitario && <span className="ml-auto text-blue-600 font-semibold italic text-[9px]">1 un = {alimento.peso_unitario}g</span>}
+                    {alimento.medidas_customizadas && alimento.medidas_customizadas.length > 0 && (
+                       <span className="ml-auto text-amber-600 font-semibold italic text-[9px]">✨ Medida Customizada</span>
+                    )}
                   </div>
                 </div>
               );

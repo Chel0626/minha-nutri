@@ -11,26 +11,6 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/templates/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/templates/page.js"
-    ],
-    "/prescricoes/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/prescricoes/page.js"
-    ],
-    "/prescricoes/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/prescricoes/[id]/page.js"
-    ],
-    "/anamneses/nova/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/anamneses/nova/page.js"
-    ],
     "/prescricoes/nova/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",

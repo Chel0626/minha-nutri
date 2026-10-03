@@ -24,11 +24,12 @@ interface ItemAlimento {
   conexao?: 'nova_linha' | 'mais' | 'ou'; 
   porcao_padrao?: string; 
   peso_unitario?: number; 
+  medidas_customizadas?: { nome: string, peso_g: number }[];
 }
 interface Opcao { id: string; itens: ItemAlimento[]; }
 type TipoBloco = 'condutas' | 'refeicao' | 'texto_livre';
 interface Bloco { id: string; tipo: TipoBloco; nome?: string; metaCarboidratos?: string; mostrarMeta?: boolean; opcoes?: Opcao[]; titulo?: string; conteudoTexto: string; expandido?: boolean; colapsado?: boolean; }
-interface ItemTabela { id: string; dbId?: string; nome: string; baseMacro: number; macrosReal?: { cho: number; ptn: number; lip: number }; porcao_padrao?: string; peso_unitario?: number; medida_caseira?: string; }
+interface ItemTabela { id: string; dbId?: string; nome: string; baseMacro: number; macrosReal?: { cho: number; ptn: number; lip: number }; porcao_padrao?: string; peso_unitario?: number; medidas_customizadas?: { nome: string, peso_g: number }[]; medida_caseira?: string; }
 interface MetadadosPrescricion { 
   pacienteId: string; 
   pacienteNome: string; 
@@ -62,11 +63,41 @@ const calcularTotalMacros = (opcao?: Opcao) => {
   return { cho: total.cho.toFixed(1), ptn: total.ptn.toFixed(1), lip: total.lip.toFixed(1), kcal: Math.round(total.kcal).toString() };
 };
 
-const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
+const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number, medidasCustomizadas?: { nome: string, peso_g: number }[]) => {
   const qtd = parseQtd(qtdStr);
   if (qtd <= 0) return [];
-  let sugestoes = [];
+  let sugestoes: { texto: string, base: number }[] = [];
 
+  // 1. ADICIONA AS MEDIDAS CUSTOMIZADAS (A prioridade do nutricionista)
+  if (medidasCustomizadas && medidasCustomizadas.length > 0) {
+     medidasCustomizadas.forEach(mc => {
+        let calc = qtd / mc.peso_g;
+        calc = Math.round(calc * 2) / 2; // Arredonda para 0.5
+        if (calc > 0) {
+           let textoQtd = calc.toString();
+           if (calc === 0.5) textoQtd = '1/2';
+           else if (calc === 1.5) textoQtd = '1 e 1/2';
+           else if (calc === 2.5) textoQtd = '2 e 1/2';
+           else if (calc === 3.5) textoQtd = '3 e 1/2';
+           else if (calc === 4.5) textoQtd = '4 e 1/2';
+
+           // Pluralizar o nome se necessário
+           let nomeMedida = mc.nome;
+           if (calc > 1) {
+              if (nomeMedida.toLowerCase() === 'colher de sopa') nomeMedida = 'colheres de sopa';
+              else if (nomeMedida.toLowerCase() === 'colher de sobremesa') nomeMedida = 'colheres de sobremesa';
+              else if (nomeMedida.toLowerCase() === 'colher de chá') nomeMedida = 'colheres de chá';
+              else if (nomeMedida.toLowerCase() === 'concha') nomeMedida = 'conchas';
+              else if (nomeMedida.toLowerCase() === 'escumadeira') nomeMedida = 'escumadeiras';
+              else if (nomeMedida.toLowerCase() === 'xícara') nomeMedida = 'xícaras';
+           }
+
+           sugestoes.push({ texto: `${textoQtd} ${nomeMedida}`, base: mc.peso_g });
+        }
+     });
+  }
+
+  // 2. ADICIONA A UNIDADE POR PESO (Se houver)
   if (pesoUnitario && pesoUnitario > 0) {
      let calc = qtd / pesoUnitario;
      let textoQtd = '';
@@ -92,21 +123,25 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
      }
   }
 
+  // 3. ADICIONA AS MEDIDAS GENÉRICAS DE VOLUME (Apenas as que não foram definidas no customizado)
+  const nomesCustomizados = medidasCustomizadas?.map(m => m.nome.toLowerCase()) || [];
+  
   const bases = [
-    { sing: 'colher de café', plur: 'colheres de café', base: 2.5 },
-    { sing: 'colher de chá', plur: 'colheres de chá', base: 5 },
-    { sing: 'colher de sobremesa', plur: 'colheres de sobremesa', base: 10 },
-    { sing: 'colher de sopa', plur: 'colheres de sopa', base: 15 },
-    { sing: 'colher de servir', plur: 'colheres de servir', base: 30 },
-    { sing: 'escumadeira', plur: 'escumadeiras', base: 30 },
-    { sing: 'concha média', plur: 'conchas médias', base: 100 },
-    { sing: 'xícara de chá', plur: 'xícaras de chá', base: 150 },
-    { sing: 'fatia média', plur: 'fatias médias', base: 30 },
-    { sing: 'fatia grande', plur: 'fatias grandes', base: 50 },
-    { sing: 'copo', plur: 'copos', base: 200 }
+    { nome: 'colher de café', sing: 'colher de café', plur: 'colheres de café', base: 2.5 },
+    { nome: 'colher de chá', sing: 'colher de chá', plur: 'colheres de chá', base: 5 },
+    { nome: 'colher de sobremesa', sing: 'colher de sobremesa', plur: 'colheres de sobremesa', base: 10 },
+    { nome: 'colher de sopa', sing: 'colher de sopa', plur: 'colheres de sopa', base: 15 },
+    { nome: 'colher de servir', sing: 'colher de servir', plur: 'colheres de servir', base: 30 },
+    { nome: 'escumadeira', sing: 'escumadeira', plur: 'escumadeiras', base: 30 },
+    { nome: 'concha', sing: 'concha média', plur: 'conchas médias', base: 100 },
+    { nome: 'xícara', sing: 'xícara de chá', plur: 'xícaras de chá', base: 150 },
+    { nome: 'fatia', sing: 'fatia média', plur: 'fatias médias', base: 30 },
+    { nome: 'copo', sing: 'copo', plur: 'copos', base: 200 }
   ];
 
   const sugestoesVolume = bases.map(b => {
+     if (nomesCustomizados.includes(b.nome)) return null; // Ignora se o nutricionista já definiu o peso exato desta medida
+
      let calc = qtd / b.base;
      calc = Math.round(calc * 2) / 2; 
      if (calc <= 0) return null;
@@ -126,16 +161,7 @@ const getSugestoesMedida = (qtdStr: string, pesoUnitario?: number) => {
 const TABELA_PROTEINAS = [ { nome: 'Frango (Peito, cozido)', base: 31.5 }, { nome: 'Carne vermelha magra (Patinho, cozido)', base: 35.9 }, { nome: 'Peixe (Pescada/Atum natural)', base: 26.6 }, { nome: 'Lombo suíno (assado)', base: 35.7 } ];
 const TABELA_ARROZ = [ { nome: 'Batata Doce (cozida)', base: 18.4 }, { nome: 'Batata Inglesa / Purê', base: 11.9 }, { nome: 'Cará (cozido)', base: 18.9 }, { nome: 'Inhame (cozido)', base: 23.5 }, { nome: 'Mandioca (cozida)', base: 30.1 }, { nome: 'Mandioquinha (cozida)', base: 18.9 }, { nome: 'Milho-verde (enlatado)', base: 17.1 } ];
 const TABELA_FRUTAS = [ { nome: 'Abacaxi', base: 12.3 }, { nome: 'Banana Prata', base: 26.0 }, { nome: 'Goiaba', base: 13.0 }, { nome: 'Laranja', base: 8.9 }, { nome: 'Mamão', base: 11.6 }, { nome: 'Manga', base: 15.0 }, { nome: 'Maçã', base: 15.2 }, { nome: 'Melancia', base: 6.8 }, { nome: 'Melão', base: 7.5 }, { nome: 'Morango', base: 6.8 }, { nome: 'Uva', base: 17.3 } ];
-
-// NOVA TABELA DE LEGUMINOSAS LIMPA
-const TABELA_FEIJAO = [ 
-  { nome: 'Feijão carioca (cozido)', base: 13.6 }, 
-  { nome: 'Feijão preto (cozido)', base: 14.0 }, 
-  { nome: 'Lentilha (cozida)', base: 16.3 }, 
-  { nome: 'Grão-de-bico (cozido)', base: 21.2 }, 
-  { nome: 'Ervilha (cozida)', base: 14.2 },
-  { nome: 'Soja (cozida)', base: 13.8 } 
-];
+const TABELA_FEIJAO = [ { nome: 'Feijão carioca (cozido)', base: 13.6 }, { nome: 'Feijão preto (cozido)', base: 14.0 }, { nome: 'Lentilha (cozida)', base: 16.3 }, { nome: 'Grão-de-bico (cozido)', base: 21.2 }, { nome: 'Ervilha (cozida)', base: 14.2 }, { nome: 'Soja (cozida)', base: 13.8 } ];
 
 function PrescricaoEditor() {
   const { pacientes } = usePacientes();
@@ -180,7 +206,13 @@ function PrescricaoEditor() {
 
   const [medidaDropdownAberto, setMedidaDropdownAberto] = useState<string | null>(null);
   const [medidaDropdownTabelaAberto, setMedidaDropdownTabelaAberto] = useState<string | null>(null);
-  const [modalEdicao, setModalEdicao] = useState({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '' });
+  
+  // MODAL DE EDIÇÃO DE ALIMENTO E MEDIDAS CUSTOMIZADAS
+  const [modalEdicao, setModalEdicao] = useState<{isOpen: boolean, id: string, nome: string, cho: string, ptn: string, lip: string, porcao: string, pesoUnitario: string, medidasCustomizadas: {nome: string, peso_g: number}[]}>({ 
+    isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '', medidasCustomizadas: [] 
+  });
+  const [novaMedidaCaseira, setNovaMedidaCaseira] = useState({ nome: 'colher de sopa', macroRef: 'cho', valor: '' });
+  
   const [salvandoAlimento, setSalvandoAlimento] = useState(false);
   const caloriasCalculadas = (parseFloat(modalEdicao.cho) || 0) * 4 + (parseFloat(modalEdicao.ptn) || 0) * 4 + (parseFloat(modalEdicao.lip) || 0) * 9;
 
@@ -408,9 +440,9 @@ function PrescricaoEditor() {
     if (tabela === 'frutas') setTabelaFrutas(prev => prev.filter(i => i.id !== id));
     if (tabela === 'feijao') setTabelaFeijao(prev => prev.filter(i => i.id !== id));
   };
-  const atualizarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas' | 'feijao', id: string, nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string, pesoUnitario?: number) => {
+  const atualizarItemTabela = (tabela: 'proteinas' | 'arroz' | 'frutas' | 'feijao', id: string, nome: string, macros: { cho: number, ptn: number, lip: number }, dbId?: string, pesoUnitario?: number, medidasCustomizadas?: any[]) => {
     const baseMacro = tabela === 'proteinas' ? macros.ptn : macros.cho;
-    const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, nome, baseMacro, macrosReal: macros, dbId, peso_unitario: pesoUnitario } : i);
+    const updateFn = (prev: ItemTabela[]) => prev.map(i => i.id === id ? { ...i, nome, baseMacro, macrosReal: macros, dbId, peso_unitario: pesoUnitario, medidas_customizadas: medidasCustomizadas } : i);
     if (tabela === 'proteinas') setTabelaProteinas(updateFn); 
     else if (tabela === 'arroz') setTabelaArroz(updateFn); 
     else if (tabela === 'frutas') setTabelaFrutas(updateFn);
@@ -446,7 +478,8 @@ function PrescricaoEditor() {
             isOpen: true, id: data.id, nome: data.nome_exibicao || data.nome,
             cho: String(data.cho || 0), ptn: String(data.ptn || 0), lip: String(data.lip || 0),
             porcao: data.porcao_padrao || '100g',
-            pesoUnitario: data.peso_unitario ? String(data.peso_unitario) : ''
+            pesoUnitario: data.peso_unitario ? String(data.peso_unitario) : '',
+            medidasCustomizadas: data.medidas_customizadas || []
           });
           return;
         }
@@ -456,8 +489,38 @@ function PrescricaoEditor() {
       isOpen: true, id: dbId || '', nome: nomeLocal,
       cho: String(macrosLocal?.cho || 0), ptn: String(macrosLocal?.ptn || 0), lip: String(macrosLocal?.lip || 0),
       porcao: '100g',
-      pesoUnitario: ''
+      pesoUnitario: '',
+      medidasCustomizadas: []
     });
+  };
+
+  const handleAddMedidaCustomizada = () => {
+     const macroBaseG = parseFloat(modalEdicao[novaMedidaCaseira.macroRef as 'cho'|'ptn'|'lip']) || 0;
+     const targetG = parseFloat(novaMedidaCaseira.valor);
+     
+     if (macroBaseG <= 0 || isNaN(targetG) || targetG <= 0) {
+        alert("Preencha corretamente os macros e o valor alvo. (Ex: O alimento precisa ter CHO > 0 para calcular a medida por CHO)");
+        return;
+     }
+
+     let baseNum = 100;
+     const matchNum = modalEdicao.porcao.match(/[\d.,]+/);
+     if (matchNum) baseNum = parseFloat(matchNum[0].replace(',', '.'));
+
+     // Regra de 3: Se baseNum(g) tem macroBaseG, quantos gramas tem targetG?
+     const pesoDaMedida = (targetG * baseNum) / macroBaseG;
+
+     setModalEdicao(prev => ({
+        ...prev,
+        medidasCustomizadas: [...prev.medidasCustomizadas, { nome: novaMedidaCaseira.nome, peso_g: pesoDaMedida }]
+     }));
+     setNovaMedidaCaseira({ ...novaMedidaCaseira, valor: '' });
+  };
+
+  const handleRemoverMedidaCustomizada = (index: number) => {
+     const novas = [...modalEdicao.medidasCustomizadas];
+     novas.splice(index, 1);
+     setModalEdicao(prev => ({ ...prev, medidasCustomizadas: novas }));
   };
 
   const handleAtualizarAlimento = async () => {
@@ -468,7 +531,8 @@ function PrescricaoEditor() {
         nome_exibicao: modalEdicao.nome, cho: parseFloat(modalEdicao.cho) || 0, 
         ptn: parseFloat(modalEdicao.ptn) || 0, lip: parseFloat(modalEdicao.lip) || 0, 
         kcal: caloriasCalculadas, porcao_padrao: modalEdicao.porcao,
-        peso_unitario: modalEdicao.pesoUnitario ? parseFloat(modalEdicao.pesoUnitario) : null
+        peso_unitario: modalEdicao.pesoUnitario ? parseFloat(modalEdicao.pesoUnitario) : null,
+        medidas_customizadas: modalEdicao.medidasCustomizadas
       };
       
       if (modalEdicao.id && !modalEdicao.id.startsWith('custom_')) {
@@ -505,7 +569,7 @@ function PrescricaoEditor() {
                      newQtd = `${v}${bu === 'g' || bu === 'ml' ? bu : ' '+bu}`;
                    }
                 }
-                return { ...i, nome: dadosSalvar.nome_exibicao, baseMacros: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, quantidade: newQtd, peso_unitario: dadosSalvar.peso_unitario || undefined };
+                return { ...i, nome: dadosSalvar.nome_exibicao, baseMacros: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, quantidade: newQtd, peso_unitario: dadosSalvar.peso_unitario || undefined, medidas_customizadas: dadosSalvar.medidas_customizadas };
               }
               return i;
             })
@@ -516,7 +580,7 @@ function PrescricaoEditor() {
       const atualizarLinhasTabela = (linhas: ItemTabela[]) => linhas.map(t => {
         if (t.dbId === modalEdicao.id || t.nome === modalEdicao.nome) {
           const baseMacroUpdate = t.nome.toLowerCase().includes('arroz') || t.nome.toLowerCase().includes('fruta') || t.nome.toLowerCase().includes('feij') || t.nome.toLowerCase().includes('lentilha') || t.nome.toLowerCase().includes('grão') || t.nome.toLowerCase().includes('soja') || t.nome.toLowerCase().includes('ervilha') ? newMacros.cho : newMacros.ptn;
-          return { ...t, nome: dadosSalvar.nome_exibicao, baseMacro: baseMacroUpdate, macrosReal: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, peso_unitario: dadosSalvar.peso_unitario || undefined };
+          return { ...t, nome: dadosSalvar.nome_exibicao, baseMacro: baseMacroUpdate, macrosReal: newMacros, porcao_padrao: dadosSalvar.porcao_padrao, peso_unitario: dadosSalvar.peso_unitario || undefined, medidas_customizadas: dadosSalvar.medidas_customizadas };
         }
         return t;
       });
@@ -525,7 +589,7 @@ function PrescricaoEditor() {
       setTabelaFrutas(atualizarLinhasTabela(tabelaFrutas));
       setTabelaFeijao(atualizarLinhasTabela(tabelaFeijao));
 
-      setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '' });
+      setModalEdicao({ isOpen: false, id: '', nome: '', cho: '', ptn: '', lip: '', porcao: '100g', pesoUnitario: '', medidasCustomizadas: [] });
     } catch (err) { alert("Erro ao salvar o alimento."); } 
     finally { setSalvandoAlimento(false); }
   };
@@ -830,7 +894,6 @@ function PrescricaoEditor() {
     setDraggableItem(null);
   };
 
-  // FUNÇÃO HELPER PARA RENDERIZAR AS LINHAS DAS TABELAS DE EQUIVALENTES
   const renderTabelaRows = (tabelaNome: 'proteinas' | 'arroz' | 'frutas' | 'feijao', data: ItemTabela[], alvo: string) => (
     <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto">
       {data.map((item) => {
@@ -840,7 +903,7 @@ function PrescricaoEditor() {
             <div className="flex-1 min-w-[200px] relative z-10">
               <BuscaAlimento
                 valorInicial={item.nome}
-                onSelect={(nome, macros, dbId, peso_unitario) => atualizarItemTabela(tabelaNome, item.id, nome, macros, dbId, peso_unitario)}
+                onSelect={(nome, macros, dbId, peso_unitario, medidas_customizadas) => atualizarItemTabela(tabelaNome, item.id, nome, macros, dbId, peso_unitario, medidas_customizadas)}
               />
             </div>
             
@@ -848,7 +911,6 @@ function PrescricaoEditor() {
               {pesoCalculado}
             </div>
 
-            {/* Varinha Mágica */}
             <div className="relative shrink-0 flex items-center gap-1 z-20">
               <button
                 type="button"
@@ -865,13 +927,19 @@ function PrescricaoEditor() {
                 </span>
               )}
 
+              {item.medidas_customizadas && item.medidas_customizadas.length > 0 && (
+                <span className="text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shadow-2xs" title="Medida Customizada ativada">
+                  ✨ Custom
+                </span>
+              )}
+
               {medidaDropdownTabelaAberto === item.id && pesoCalculado !== '--' && (
                 <div className="absolute top-full right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 z-[60] py-1">
                   <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sugestões (Base: {pesoCalculado})</span>
                   </div>
                   <div className="max-h-48 overflow-y-auto">
-                    {getSugestoesMedida(pesoCalculado, item.peso_unitario).map((sug, idx) => (
+                    {getSugestoesMedida(pesoCalculado, item.peso_unitario, item.medidas_customizadas).map((sug, idx) => (
                       <button
                         key={idx}
                         type="button"
@@ -1198,10 +1266,16 @@ function PrescricaoEditor() {
                                               <Wand2 className="w-3.5 h-3.5" />
                                             </button>
                                             
-                                            {/* ETIQUETA VISUAL DE PESO UNITÁRIO */}
+                                            {/* ETIQUETAS VISUAIS DE DADOS NO BANCO */}
                                             {item.peso_unitario && (
                                               <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-2xs" title={`Unidade cadastrada: 1 un = ${item.peso_unitario}g`}>
-                                                ⚖️ 1un={item.peso_unitario}g
+                                                ⚖️️ 1un={item.peso_unitario}g
+                                              </span>
+                                            )}
+
+                                            {item.medidas_customizadas && item.medidas_customizadas.length > 0 && (
+                                              <span className="text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shadow-2xs" title="Medida Customizada ativada">
+                                                ✨ Custom
                                               </span>
                                             )}
 
@@ -1211,7 +1285,7 @@ function PrescricaoEditor() {
                                                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sugestões (Base: {item.quantidade || '0'})</span>
                                                 </div>
                                                 <div className="max-h-48 overflow-y-auto">
-                                                  {getSugestoesMedida(item.quantidade, item.peso_unitario).map((sug, idx) => (
+                                                  {getSugestoesMedida(item.quantidade, item.peso_unitario, item.medidas_customizadas).map((sug, idx) => (
                                                     <button 
                                                       key={idx} 
                                                       type="button" 
@@ -1245,8 +1319,8 @@ function PrescricaoEditor() {
                                           <input type="text" value={item.quantidade} onChange={(e) => atualizarItem(bloco.id, opcao.id, item.id, 'quantidade', e.target.value)} placeholder="Qtd (100g)" className="w-16 sm:w-20 shrink-0 px-1 border-b border-dashed border-transparent hover:border-slate-300 focus:border-[#0066cc] bg-transparent outline-none text-[11pt] font-semibold text-black" />
                                           
                                           <div className="flex-1 min-w-[100px] relative">
-                                            <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId, peso_unitario) => {
-                                                setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g', peso_unitario: peso_unitario } : i) } : o) } : b))
+                                            <BuscaAlimento valorInicial={item.nome} onSelect={(nome, macros, dbId, peso_unitario, medidas_customizadas) => {
+                                                setBlocos(prev => prev.map(b => b.id === bloco.id && b.tipo === 'refeicao' ? { ...b, opcoes: b.opcoes!.map(o => o.id === opcao.id ? { ...o, itens: o.itens.map(i => i.id === item.id ? { ...i, nome: nome, baseMacros: macros, dbId: dbId, porcao_padrao: '100g', peso_unitario: peso_unitario, medidas_customizadas: medidas_customizadas } : i) } : o) } : b))
                                               }} 
                                             />
                                           </div>
@@ -1729,19 +1803,21 @@ function PrescricaoEditor() {
         </div>
       )}
 
-      {/* MODAL DE EDIÇÃO DE ALIMENTO COM PESO UNITÁRIO */}
+      {/* MODAL DE EDIÇÃO DE ALIMENTO E MEDIDA CUSTOMIZADA */}
       {modalEdicao.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h3 className="text-lg font-bold">Refinar Alimento</h3>
               <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })}><X className="w-5 h-5"/></button>
             </div>
-            <div className="p-6 space-y-4">
+            
+            <div className="p-6 space-y-5 overflow-y-auto">
               <div>
                 <label className="block text-sm font-semibold mb-1">Nome do Alimento</label>
                 <input type="text" value={modalEdicao.nome} onChange={e => setModalEdicao({...modalEdicao, nome: e.target.value})} className="w-full px-3 py-2 border rounded" />
               </div>
+              
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-emerald-700">Porção Padrão</label>
@@ -1752,17 +1828,78 @@ function PrescricaoEditor() {
                   <input type="number" value={modalEdicao.pesoUnitario} onChange={e => setModalEdicao({...modalEdicao, pesoUnitario: e.target.value})} placeholder="Ex: 12" className="w-full px-3 py-2 border border-blue-300 bg-blue-50 rounded text-sm" />
                 </div>
               </div>
-              <p className="text-[10px] text-slate-500 -mt-2">Os macros abaixo devem ser referentes à <b>Porção Padrão</b>.</p>
+              <p className="text-[10px] text-slate-500 -mt-3">Os macros abaixo devem ser referentes à <b>Porção Padrão</b>.</p>
               
-              <div className="grid grid-cols-3 gap-3 pt-2">
+              <div className="grid grid-cols-3 gap-3 pt-1">
                 <div><label className="block text-xs font-semibold mb-1">CHO (g)</label><input type="number" value={modalEdicao.cho} onChange={e => setModalEdicao({...modalEdicao, cho: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
                 <div><label className="block text-xs font-semibold mb-1">PTN (g)</label><input type="number" value={modalEdicao.ptn} onChange={e => setModalEdicao({...modalEdicao, ptn: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
                 <div><label className="block text-xs font-semibold mb-1">LIP (g)</label><input type="number" value={modalEdicao.lip} onChange={e => setModalEdicao({...modalEdicao, lip: e.target.value})} className="w-full px-3 py-2 border rounded" /></div>
               </div>
+
+              {/* SEÇÃO DE MEDIDAS CUSTOMIZADAS */}
+              <div className="pt-4 border-t border-slate-200">
+                <h4 className="text-sm font-bold text-amber-700 mb-2 flex items-center gap-1"><Wand2 className="w-4 h-4"/> Medidas Caseiras Específicas</h4>
+                <p className="text-[10px] text-slate-500 mb-3 leading-tight">Defina quanto pesa uma medida apenas para este alimento (Ex: Colher de sopa = 3g CHO). O sistema calculará o peso em gramas.</p>
+                
+                <div className="flex items-center gap-2 mb-3">
+                  <select 
+                    value={novaMedidaCaseira.nome} 
+                    onChange={e => setNovaMedidaCaseira({...novaMedidaCaseira, nome: e.target.value})}
+                    className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none"
+                  >
+                    <option value="colher de sopa">Colher de Sopa</option>
+                    <option value="colher de sobremesa">Colher de Sobremesa</option>
+                    <option value="concha">Concha</option>
+                    <option value="escumadeira">Escumadeira</option>
+                    <option value="xícara">Xícara</option>
+                    <option value="fatia">Fatia</option>
+                    <option value="copo">Copo</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs text-slate-600 font-semibold">=</span>
+                  <input 
+                    type="number" 
+                    placeholder="Ex: 3"
+                    value={novaMedidaCaseira.valor}
+                    onChange={e => setNovaMedidaCaseira({...novaMedidaCaseira, valor: e.target.value})}
+                    className="w-16 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none text-center"
+                  />
+                  <span className="text-xs text-slate-600 font-semibold">g de</span>
+                  <select 
+                    value={novaMedidaCaseira.macroRef} 
+                    onChange={e => setNovaMedidaCaseira({...novaMedidaCaseira, macroRef: e.target.value})}
+                    className="w-20 px-2 py-1.5 border border-slate-300 rounded text-xs outline-none font-bold text-slate-700"
+                  >
+                    <option value="cho">CHO</option>
+                    <option value="ptn">PTN</option>
+                    <option value="lip">LIP</option>
+                  </select>
+                  
+                  <button type="button" onClick={handleAddMedidaCustomizada} className="ml-auto p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition" title="Adicionar Regra">
+                    <Plus className="w-4 h-4"/>
+                  </button>
+                </div>
+
+                {/* LISTA DAS MEDIDAS SALVAS */}
+                {modalEdicao.medidasCustomizadas.length > 0 && (
+                  <div className="mt-3 space-y-1.5 bg-slate-50 p-2 rounded border border-slate-200">
+                    {modalEdicao.medidasCustomizadas.map((mc, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs bg-white px-2 py-1 rounded border border-slate-100 shadow-sm">
+                        <span className="font-semibold text-slate-700 capitalize">{mc.nome} <span className="font-normal text-slate-400">({mc.peso_g.toFixed(1)}g)</span></span>
+                        <button type="button" onClick={() => handleRemoverMedidaCustomizada(idx)} className="text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+              </div>
             </div>
-            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t">
+
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t shrink-0">
               <button onClick={() => setModalEdicao({ ...modalEdicao, isOpen: false })} className="px-4 py-2 font-medium text-slate-600">Cancelar</button>
-              <button onClick={handleAtualizarAlimento} disabled={salvandoAlimento || !modalEdicao.nome.trim()} className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium">{salvandoAlimento ? 'Salvando...' : 'Salvar no Banco'}</button>
+              <button onClick={handleAtualizarAlimento} disabled={salvandoAlimento || !modalEdicao.nome.trim()} className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700">{salvandoAlimento ? 'Salvando...' : 'Salvar no Banco'}</button>
             </div>
           </div>
         </div>
