@@ -11,10 +11,10 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/prescricoes/nova/page": [
+    "/alimentos/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/prescricoes/nova/page.js"
+      "static/chunks/app/alimentos/page.js"
     ],
     "/_not-found/page": [
       "static/chunks/webpack.js",

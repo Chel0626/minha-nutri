@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, FileText, Settings, ClipboardList, ChevronRight, LayoutTemplate } from 'lucide-react';
+import { Users, FileText, Settings, ClipboardList, ChevronRight, LayoutTemplate, Database } from 'lucide-react';
 
 export default function Dashboard() {
   return (
@@ -56,6 +56,20 @@ export default function Dashboard() {
             </h2>
             <p className="text-slate-600 text-sm">
               Histórico de dietas, geração de PDFs e novas prescrições.
+            </p>
+          </Link>
+
+          {/* Card: Banco de Alimentos (NOVO) */}
+          <Link href="/alimentos" className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-rose-200 transition-all">
+            <div className="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <Database className="w-6 h-6 text-rose-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 mb-2 flex items-center justify-between">
+              Banco de Alimentos
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors" />
+            </h2>
+            <p className="text-slate-600 text-sm">
+              Gerenciar, adicionar e corrigir a tabela nutricional do sistema.
             </p>
           </Link>
 
