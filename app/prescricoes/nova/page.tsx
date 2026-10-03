@@ -796,7 +796,7 @@ function PrescricaoEditor() {
       {data.map((item, index) => {
         const pesoCalculado = calcularPesoEquivalente(alvo, item.baseMacro, item.porcao_padrao);
         return (
-          <div key={item.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white p-2 rounded border border-slate-200 relative" style={{ zIndex: 50 - index }}>
+          <div key={item.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white p-2 rounded border border-slate-200 relative" style={{ zIndex: 40 - index }}>
             <div className="flex-1 min-w-[200px] relative z-10">
               <BuscaAlimento
                 valorInicial={item.nome}
@@ -880,9 +880,10 @@ function PrescricaoEditor() {
       
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          @page { margin-top: 15mm; margin-bottom: 25mm; }
+          @page { size: A4; margin: 15mm 15mm 20mm 15mm; }
           body { -webkit-print-color-adjust: exact; }
           thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
         }
       `}} />
 
@@ -898,8 +899,8 @@ function PrescricaoEditor() {
         </div>
       )}
 
-      {/* HEADER DE NAVEGAÇÃO */}
-      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
+      {/* HEADER DE NAVEGAÇÃO INTERNO */}
+      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-40 print:hidden">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <button onClick={() => router.back()} className="text-slate-500 hover:text-emerald-600 font-medium text-sm transition-colors">
             ← Voltar
@@ -1127,7 +1128,7 @@ function PrescricaoEditor() {
                                             ? 'border-t-2 border-t-emerald-500 bg-emerald-50 shadow-sm' 
                                             : 'bg-transparent border border-transparent hover:bg-slate-50 hover:border-slate-200'
                                         }`}
-                                        style={{ zIndex: 100 - iIndex }}
+                                        style={{ zIndex: 40 - iIndex }}
                                       >
                                         <div className="flex items-center gap-1 sm:gap-1.5 w-full flex-wrap xl:flex-nowrap relative">
                                           
@@ -1358,7 +1359,7 @@ function PrescricaoEditor() {
       </div>
 
       {/* ÁREA DE IMPRESSÃO PDF NATIVA COM LIMITES SEGUROS DE MARGEM */}
-      <table id="print-area" className="hidden print:table w-full mx-auto max-w-[195mm] bg-white text-black font-sans text-[10pt]">
+      <table id="print-area" className="hidden print:table w-full max-w-[200mm] print:max-w-full mx-auto bg-white text-black font-sans text-[10pt]">
         <thead className="table-header-group">
           <tr>
             <td>
@@ -1441,10 +1442,10 @@ function PrescricaoEditor() {
               {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.feijao || tabelasSelecionadas.frutas) && (
                 <div className="mt-10 break-before-auto">
                   {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
-                    <div className="mb-8 break-inside-avoid px-1">
+                    <div className="mb-8 px-1">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
-                      <table className="w-full border-collapse border border-black text-[9pt]">
-                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Opção</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade / Peso</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Opção</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaProteinas.map((item, idx) => item.nome ? (
                             <tr key={idx}><td className="border border-black px-2 py-1">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.proteinas, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic">{item.medida_caseira || '--'}</td></tr>
@@ -1454,10 +1455,10 @@ function PrescricaoEditor() {
                     </div>
                   )}
                   {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
-                    <div className="mb-8 break-inside-avoid px-1">
+                    <div className="mb-8 px-1">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 2: Substitutos de Arroz / Raízes (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[9pt]">
-                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade Equivalente</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaArroz.map((item, idx) => item.nome ? (
                             <tr key={idx}><td className="border border-black px-2 py-1">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.substitutosArroz, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic">{item.medida_caseira || '--'}</td></tr>
@@ -1467,10 +1468,10 @@ function PrescricaoEditor() {
                     </div>
                   )}
                   {tabelasSelecionadas.feijao && alvosTabelas.feijao && (
-                    <div className="mb-8 break-inside-avoid px-1">
+                    <div className="mb-8 px-1">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 3: Substitutos de Leguminosas / Feijões (aprox. {alvosTabelas.feijao}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[9pt]">
-                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade Equivalente</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaFeijao.map((item, idx) => item.nome ? (
                             <tr key={idx}><td className="border border-black px-2 py-1">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.feijao, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic">{item.medida_caseira || '--'}</td></tr>
@@ -1480,10 +1481,10 @@ function PrescricaoEditor() {
                     </div>
                   )}
                   {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
-                    <div className="mb-8 break-inside-avoid px-1">
+                    <div className="mb-8 px-1">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 4: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
-                      <table className="w-full border-collapse border border-black text-[9pt]">
-                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Fruta</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade / Peso</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
+                      <table className="w-full table-fixed border-collapse border border-black text-[9pt]">
+                        <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[40%]">Fruta</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade</th><th className="border border-black text-left px-2 py-1 font-bold w-[35%]">Medida Caseira</th></tr></thead>
                         <tbody>
                           {tabelaFrutas.map((item, idx) => item.nome ? (
                             <tr key={idx}><td className="border border-black px-2 py-1">{item.nome}</td><td className="border border-black px-2 py-1 text-center">{calcularPesoEquivalente(alvosTabelas.frutas, item.baseMacro, item.porcao_padrao)}</td><td className="border border-black px-2 py-1 italic">{item.medida_caseira || '--'}</td></tr>
