@@ -685,8 +685,8 @@ video {
 .-ml-1 {
   margin-left: -0.25rem;
 }
-.-mt-2 {
-  margin-top: -0.5rem;
+.-mt-3 {
+  margin-top: -0.75rem;
 }
 .mb-1 {
   margin-bottom: 0.25rem;
@@ -781,8 +781,11 @@ video {
 .mt-auto {
   margin-top: auto;
 }
-.-mt-3 {
-  margin-top: -0.75rem;
+.line-clamp-1 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 .line-clamp-2 {
   overflow: hidden;
@@ -859,6 +862,9 @@ video {
 .max-h-48 {
   max-height: 12rem;
 }
+.max-h-60 {
+  max-height: 15rem;
+}
 .max-h-64 {
   max-height: 16rem;
 }
@@ -870,6 +876,9 @@ video {
 }
 .max-h-\[90vh\] {
   max-height: 90vh;
+}
+.max-h-\[95vh\] {
+  max-height: 95vh;
 }
 .min-h-\[1056px\] {
   min-height: 1056px;
@@ -1121,6 +1130,11 @@ video {
   margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
   margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
 }
+.space-y-1\.5 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.375rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.375rem * var(--tw-space-y-reverse));
+}
 .space-y-2 > :not([hidden]) ~ :not([hidden]) {
   --tw-space-y-reverse: 0;
   margin-top: calc(0.5rem * calc(1 - var(--tw-space-y-reverse)));
@@ -1140,11 +1154,6 @@ video {
   --tw-space-y-reverse: 0;
   margin-top: calc(1.5rem * calc(1 - var(--tw-space-y-reverse)));
   margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
-}
-.space-y-1\.5 > :not([hidden]) ~ :not([hidden]) {
-  --tw-space-y-reverse: 0;
-  margin-top: calc(0.375rem * calc(1 - var(--tw-space-y-reverse)));
-  margin-bottom: calc(0.375rem * var(--tw-space-y-reverse));
 }
 .divide-y > :not([hidden]) ~ :not([hidden]) {
   --tw-divide-y-reverse: 0;
@@ -1240,6 +1249,10 @@ video {
   --tw-border-opacity: 1;
   border-color: rgb(30 58 138 / var(--tw-border-opacity, 1));
 }
+.border-amber-100 {
+  --tw-border-opacity: 1;
+  border-color: rgb(254 243 199 / var(--tw-border-opacity, 1));
+}
 .border-amber-200 {
   --tw-border-opacity: 1;
   border-color: rgb(253 230 138 / var(--tw-border-opacity, 1));
@@ -1331,6 +1344,9 @@ video {
 .bg-amber-50 {
   --tw-bg-opacity: 1;
   background-color: rgb(255 251 235 / var(--tw-bg-opacity, 1));
+}
+.bg-amber-50\/50 {
+  background-color: rgb(255 251 235 / 0.5);
 }
 .bg-amber-500 {
   --tw-bg-opacity: 1;
@@ -1581,6 +1597,9 @@ video {
 .pr-4 {
   padding-right: 1rem;
 }
+.pt-1 {
+  padding-top: 0.25rem;
+}
 .pt-2 {
   padding-top: 0.5rem;
 }
@@ -1589,9 +1608,6 @@ video {
 }
 .pt-6 {
   padding-top: 1.5rem;
-}
-.pt-1 {
-  padding-top: 0.25rem;
 }
 .text-left {
   text-align: left;
@@ -1758,6 +1774,10 @@ video {
 .text-blue-700 {
   --tw-text-opacity: 1;
   color: rgb(29 78 216 / var(--tw-text-opacity, 1));
+}
+.text-blue-800 {
+  --tw-text-opacity: 1;
+  color: rgb(30 64 175 / var(--tw-text-opacity, 1));
 }
 .text-emerald-500 {
   --tw-text-opacity: 1;
@@ -2197,6 +2217,10 @@ body {
   opacity: 1;
 }
 
+.hover\:opacity-80:hover {
+  opacity: 0.8;
+}
+
 .hover\:shadow-md:hover {
   --tw-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --tw-shadow-colored: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);
@@ -2242,10 +2266,21 @@ body {
   outline-offset: 2px;
 }
 
+.focus\:ring-1:focus {
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
 .focus\:ring-2:focus {
   --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
   --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
   box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
+.focus\:ring-blue-500:focus {
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(59 130 246 / var(--tw-ring-opacity, 1));
 }
 
 .focus\:ring-emerald-500:focus {

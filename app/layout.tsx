@@ -22,13 +22,14 @@ export default function RootLayout({
         <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <div className="flex items-center justify-between h-16">
-              {/* Logo / Título */}
-              <div className="flex-shrink-0 flex items-center gap-2">
+              
+              {/* Logo / Título - AGORA CLICÁVEL 🍊 */}
+              <Link href="/" className="flex-shrink-0 flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
                 <span className="text-2xl">🍊</span>
                 <span className="font-bold text-xl text-slate-800 tracking-tight">
                   Minha<span className="text-emerald-600">Nutri</span>
                 </span>
-              </div>
+              </Link>
               
               {/* Links de Navegação */}
               <div className="hidden md:flex space-x-8">
