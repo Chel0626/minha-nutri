@@ -881,11 +881,35 @@ function PrescricaoEditor() {
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           @page { size: A4; margin: 15mm 15mm 20mm 15mm; }
-          body { -webkit-print-color-adjust: exact; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-          tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+          /* Cabeçalho e rodapé da prescrição repetem em TODAS as páginas */
+          #print-area > thead { display: table-header-group; }
+          #print-area > tfoot { display: table-footer-group; }
+
+          /* A linha principal do corpo PODE quebrar entre páginas,
+             senão o conteúdo nunca pagina e o rodapé não se repete */
+          #print-area > tbody > tr,
+          #print-area > tbody > tr > td { break-inside: auto; page-break-inside: auto; }
+
+          /* Blocos de conteúdo (refeições, textos) não devem ser cortados ao meio:
+             se não couber, pulam inteiros para a página seguinte */
           .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
+
+          /* Tabelas internas: cada LINHA fica inteira numa página.
+             A tabela em si pode quebrar entre linhas (não forçamos avoid na tabela toda) */
+          #print-area table thead { display: table-header-group; }
+          #print-area table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+          #print-area table { break-inside: auto; page-break-inside: auto; }
+
+          /* Garante que o rodapé fique colado ao fim do fluxo e não sobreponha */
+          #print-area > tfoot td { padding-top: 8px; }
+
+          /* Wrapper de cada tabela de substituição: permite quebrar entre linhas,
+             mas evita deixar o título ("Tabela X:") sozinho no fim da página */
+          .tabela-print { break-inside: auto; page-break-inside: auto; }
+          .tabela-print > p { break-after: avoid; page-break-after: avoid; }
+          .tabela-print table thead { display: table-header-group; }
         }
       `}} />
 
@@ -1444,7 +1468,7 @@ function PrescricaoEditor() {
               {(tabelasSelecionadas.proteinas || tabelasSelecionadas.substitutosArroz || tabelasSelecionadas.feijao || tabelasSelecionadas.frutas) && (
                 <div className="mt-10 break-before-auto">
                   {tabelasSelecionadas.proteinas && alvosTabelas.proteinas && (
-                    <div className="mb-8 break-inside-avoid px-1 w-full">
+                    <div className="mb-8 px-1 w-full tabela-print">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 1: aprox. {alvosTabelas.proteinas}g de Proteína Animal (Pronto)</p>
                       <table className="w-full border-collapse border border-black text-[9pt]">
                         <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Opção</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade / Peso</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
@@ -1457,7 +1481,7 @@ function PrescricaoEditor() {
                     </div>
                   )}
                   {tabelasSelecionadas.substitutosArroz && alvosTabelas.substitutosArroz && (
-                    <div className="mb-8 break-inside-avoid px-1 w-full">
+                    <div className="mb-8 px-1 w-full tabela-print">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 2: Substitutos de Arroz / Raízes (aprox. {alvosTabelas.substitutosArroz}g Carboidratos)</p>
                       <table className="w-full border-collapse border border-black text-[9pt]">
                         <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade Equivalente</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
@@ -1470,7 +1494,7 @@ function PrescricaoEditor() {
                     </div>
                   )}
                   {tabelasSelecionadas.feijao && alvosTabelas.feijao && (
-                    <div className="mb-8 break-inside-avoid px-1 w-full">
+                    <div className="mb-8 px-1 w-full tabela-print">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 3: Substitutos de Leguminosas / Feijões (aprox. {alvosTabelas.feijao}g Carboidratos)</p>
                       <table className="w-full border-collapse border border-black text-[9pt]">
                         <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Alimento</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade Equivalente</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
@@ -1483,7 +1507,7 @@ function PrescricaoEditor() {
                     </div>
                   )}
                   {tabelasSelecionadas.frutas && alvosTabelas.frutas && (
-                    <div className="mb-8 break-inside-avoid px-1 w-full">
+                    <div className="mb-8 px-1 w-full tabela-print">
                       <p className="font-bold text-[#1e3a8a] text-[11pt] mb-2">Tabela 4: Frutas (1 porção ≈ {alvosTabelas.frutas}g Carboidratos)</p>
                       <table className="w-full border-collapse border border-black text-[9pt]">
                         <thead><tr><th className="border border-black text-left px-2 py-1 font-bold w-[45%]">Fruta</th><th className="border border-black text-center px-2 py-1 font-bold w-[25%]">Quantidade / Peso</th><th className="border border-black text-left px-2 py-1 font-bold w-[30%]">Medida Caseira</th></tr></thead>
